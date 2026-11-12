@@ -1,0 +1,15 @@
+// Generator and datasource only. Domain models live in one file per domain
+// (identity.prisma, tenancy.prisma, ...) added by later phases.
+// The connection URL is not declared here: Prisma 7 reads it from
+// prisma.config.ts (CLI) and from the driver adapter (runtime).
+
+generator client {
+  provider            = "prisma-client"
+  output              = "../../src/generated/prisma"
+  moduleFormat        = "esm"
+  importFileExtension = "js"
+}
+
+datasource db {
+  provider = "postgresql"
+}

@@ -1,0 +1,118 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main, master]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: ci-superuser-password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+
+    env:
+      # Throwaway credentials: the database lives and dies with this job.
+      NODE_ENV: test
+      PORT: '3001'
+      DATABASE_URL: postgresql://doctayo_app:ci-app-password@localhost:5432/doc_tayo_test
+      DATABASE_MIGRATION_URL: postgresql://doctayo_owner:ci-owner-password@localhost:5432/doc_tayo_test
+      DATABASE_SCHEMA: public
+      DATABASE_SSL: disable
+      CORS_ALLOWED_ORIGINS: http://localhost:5173
+      CORS_ALLOW_CREDENTIALS: 'false'
+      LOG_LEVEL: error
+      LOG_FORMAT: json
+      SWAGGER_ENABLED: 'true'
+      OBSERVE_ENABLED: 'false'
+
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install dependencies (lockfile)
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npm run db:generate
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Format check
+        run: npm run format:check
+
+      - name: Type check
+        run: npm run typecheck
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Create roles, databases and grants
+        run: >
+          psql -v ON_ERROR_STOP=1
+          -v owner_password=ci-owner-password
+          -v app_password=ci-app-password
+          -f scripts/db/bootstrap.sql
+        env:
+          PGHOST: localhost
+          PGPORT: '5432'
+          PGUSER: postgres
+          PGPASSWORD: ci-superuser-password
+          PGDATABASE: postgres
+
+      - name: Apply migrations
+        run: npm run db:migrate:deploy
+
+      - name: End-to-end tests (real PostgreSQL)
+        run: npm run test:e2e
+
+      - name: Build
+        run: npm run build
+
+  audit:
+    # Informational for now; make blocking once the baseline is understood.
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm audit --omit=dev --audit-level=high
+
+  docker:
+    # Proves the image builds from a clean checkout (both deployable targets).
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - run: docker build --target runtime -t doc-tayo-api .
+      - run: docker build --target migrate -t doc-tayo-migrate .

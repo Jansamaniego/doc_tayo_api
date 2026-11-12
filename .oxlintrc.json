@@ -1,0 +1,33 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "ignorePatterns": ["src/generated/**", "dist/**", "coverage/**"],
+  "rules": {
+    "typescript/no-explicit-any": "off",
+    "typescript/no-floating-promises": "error",
+    "no-console": "error",
+    "eqeqeq": "error",
+    "no-restricted-globals": [
+      "error",
+      {
+        "name": "process",
+        "message": "Read configuration through src/config (ConfigModule), not process.env."
+      }
+    ]
+  },
+  "overrides": [
+    {
+      "files": [
+        "src/config/**",
+        "src/**/*.spec.ts",
+        
+        "test/**"
+      ],
+      "rules": { "no-restricted-globals": "off" }
+    },
+    {
+      "files": ["test/**"],
+      "rules": { "no-console": "off" }
+    }
+  ],
+  "env": { "node": true }
+}
