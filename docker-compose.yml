@@ -1,64 +1,32 @@
-# Two ways to run the API in Docker. See docs/docker.md.
+# Local development stack: API + PostgreSQL + a one-off migration job.
+# Guide: docs/docker.md
 #
-# 1) Against YOUR Postgres on the host (localhost:5432):
-#      docker compose up --build api
-#    Uses host networking (Linux) because that Postgres listens on 127.0.0.1
-#    only; a container on Docker's private network could not reach it.
+#   docker compose up --build -d      # start postgres + api
+#   docker compose run --rm migrate   # apply database migrations
+#   docker compose down               # stop (database data is kept)
+#   docker compose down -v            # stop AND DELETE the database volume
 #
-# 2) Fully isolated, with its own throwaway Postgres container:
-#      docker compose --profile isolated up --build
-#    Shows ports, volumes and service-name networking. It never touches 5432
-#    (the database is published on host port 5434 for DBeaver).
+# Compose puts every service on one private network, where each service is
+# reachable by its name (the API reaches the database at "postgres:5432").
+# Only the ports listed under `ports:` are reachable from your machine.
 #
-# Run migrations (either mode) once the database is reachable:
-#      docker compose run --rm migrate          # mode 1
-#      docker compose --profile isolated run --rm migrate-isolated   # mode 2
+# The api image is the same image you would deploy. Everything environment-
+# specific comes from the `environment:` block, so in production you run the
+# same image with a different DATABASE_URL (e.g. an AWS RDS endpoint).
 
 services:
-  # --- Mode 1: API + your existing host Postgres ----------------------------
-  api:
-    build:
-      context: .
-      target: runtime
-    image: doc-tayo-api
-    network_mode: host # container shares the host's network: "localhost" == your machine
-    environment:
-      # Production defaults are strict (TLS to DB, CORS list). Local container
-      # runs use development settings.
-      NODE_ENV: development
-      PORT: '3000'
-      DATABASE_URL: ${DOCKER_DATABASE_URL:-postgresql://doctayo_app:doctayo_app_dev@localhost:5432/doc_tayo}
-      DATABASE_SSL: disable
-      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:5173}
-      LOG_FORMAT: json
-      LOG_LEVEL: log
-      SWAGGER_ENABLED: 'true'
-      OBSERVE_ENABLED: 'false'
-    restart: unless-stopped
-
-  migrate:
-    build:
-      context: .
-      target: migrate
-    image: doc-tayo-migrate
-    network_mode: host
-    environment:
-      DATABASE_MIGRATION_URL: ${DOCKER_DATABASE_MIGRATION_URL:-postgresql://doctayo_owner:doctayo_owner_dev@localhost:5432/doc_tayo}
-    profiles: ['tools'] # not started by `up`; only by `run`
-
-  # --- Mode 2: everything in containers --------------------------------------
   postgres:
     image: postgres:17-alpine
-    profiles: ['isolated']
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: ${POSTGRES_SUPERUSER_PASSWORD:-postgres}
+      # Read by scripts/docker/postgres-init.sh on the first start only.
       DB_OWNER_PASSWORD: ${DB_OWNER_PASSWORD:-doctayo_owner_dev}
       DB_APP_PASSWORD: ${DB_APP_PASSWORD:-doctayo_app_dev}
     ports:
-      - '127.0.0.1:5434:5432' # host:container. 5434 to stay away from your 5432.
+      - '127.0.0.1:5434:5432' # host:container. 5434 stays clear of a host Postgres on 5432.
     volumes:
-      - isolated_pgdata:/var/lib/postgresql/data # data survives container removal
+      - pgdata:/var/lib/postgresql/data # data survives container removal
       - ./scripts/db:/scripts/db:ro
       - ./scripts/docker/postgres-init.sh:/docker-entrypoint-initdb.d/10-bootstrap.sh:ro
     healthcheck:
@@ -67,40 +35,44 @@ services:
       timeout: 3s
       retries: 10
 
-  api-isolated:
+  api:
     build:
       context: .
       target: runtime
     image: doc-tayo-api
-    profiles: ['isolated']
     depends_on:
       postgres:
         condition: service_healthy # wait until Postgres answers
     ports:
-      - '3000:3000'
+      - '127.0.0.1:3000:3000' # reachable from this machine only
     environment:
+      # The image defaults to production, which is strict (TLS to the DB, CORS
+      # list, Observe keys). Local runs use development settings.
       NODE_ENV: development
       PORT: '3000'
-      # "postgres" is the service name: Compose gives containers DNS names.
-      DATABASE_URL: postgresql://doctayo_app:doctayo_app_dev@postgres:5432/doc_tayo
-      DATABASE_SSL: disable
-      CORS_ALLOWED_ORIGINS: http://localhost:5173
+      # "postgres" is the service name; Compose provides the DNS entry.
+      # Credentials mirror DB_APP_PASSWORD above. Runtime role: DML only.
+      DATABASE_URL: postgresql://doctayo_app:${DB_APP_PASSWORD:-doctayo_app_dev}@postgres:5432/doc_tayo
+      DATABASE_SSL: disable # traffic stays on the private Docker network
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:5173}
       LOG_FORMAT: json
       LOG_LEVEL: log
       SWAGGER_ENABLED: 'true'
       OBSERVE_ENABLED: 'false'
 
-  migrate-isolated:
+  # One-off job (never runs on `up`): docker compose run --rm migrate
+  # Uses the owner role, which the api service never receives.
+  migrate:
     build:
       context: .
       target: migrate
     image: doc-tayo-migrate
-    profiles: ['isolated']
+    profiles: ['tools'] # not started by `up`; only by `run`
     depends_on:
       postgres:
         condition: service_healthy
     environment:
-      DATABASE_MIGRATION_URL: postgresql://doctayo_owner:doctayo_owner_dev@postgres:5432/doc_tayo
+      DATABASE_MIGRATION_URL: postgresql://doctayo_owner:${DB_OWNER_PASSWORD:-doctayo_owner_dev}@postgres:5432/doc_tayo
 
 volumes:
-  isolated_pgdata:
+  pgdata:

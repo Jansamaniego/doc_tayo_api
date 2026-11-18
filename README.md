@@ -14,7 +14,7 @@ cp .env.example .env            # then fill in Observe keys if you use them
 cp .env.test.example .env.test
 DB_ADMIN_URL=postgresql://postgres:<password>@localhost:5432/postgres npm run db:bootstrap   # once: roles, doc_tayo(_test), grants
 npm run db:generate             # Prisma client -> src/generated (gitignored)
-npm run db:migrate:deploy       # no-op until Phase 2 adds models
+npm run db:migrate:deploy       # applies the migrations (tenancy foundation since Phase 2)
 npm run start:dev
 ```
 
@@ -35,7 +35,7 @@ open http://localhost:3000/api/docs   # Swagger UI (non-production)
 | `lint`, `format`, `format:check`, `typecheck` | oxlint (type-aware), Prettier, `tsc --noEmit` |
 | `test` | Unit + architecture tests (no database needed) |
 | `test:e2e` | End-to-end tests against the real `doc_tayo_test` database |
-| `docker:build` / `docker:up` / `docker:migrate` / `docker:down` | Build the image / run the API in Docker / apply migrations in Docker / stop (see [Docker guide](docs/docker.md)) |
+| `docker:build` / `docker:up` / `docker:migrate` / `docker:down` | Build the image / start the API + Postgres in Docker / apply migrations in Docker / stop (see [Docker guide](docs/docker.md)) |
 | `db:bootstrap` | One-time idempotent setup of roles, databases and grants (needs `DB_ADMIN_URL`) |
 | `db:generate` | `prisma generate` |
 | `db:migrate:dev` / `db:migrate:deploy` / `db:migrate:status` | Migrations (owner role) |

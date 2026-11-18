@@ -40,15 +40,19 @@ Every non-2xx response uses one shape:
 | `NOT_READY` | 503 | The service is not ready yet. Please try again shortly. |
 | `SERVICE_UNAVAILABLE` | 503 | The service is temporarily unavailable. Please try again shortly. |
 | `INTERNAL_ERROR` | 500 | Something went wrong on our side. Please try again. |
+| `UNAUTHENTICATED` | 401 | Please sign in to continue. |
+| `FORBIDDEN` | 403 | You do not have permission to do this. |
+| `TENANT_NOT_SELECTED` | 403 | Please choose a clinic to continue. |
+| `TENANT_SUSPENDED` | 403 | This clinic's access is currently suspended. |
+| `TENANT_DEACTIVATED` | 403 | This clinic is no longer active. |
+| `TENANT_ACCESS_DENIED` | 403 | You do not have access to this clinic. |
 
 ## Reserved codes
 
-Cataloged now so the contract is stable; nothing produces them yet (authentication, authorization and rate limiting arrive in later phases).
+Cataloged so the contract is stable. `CONFLICT` is produced by `TenantLifecycleService` for an invalid tenant status transition. `METHOD_NOT_ALLOWED` and `RATE_LIMITED` are only mapped from framework 405/429 exceptions (`to-api-error.ts`); nothing throws 429 until the Phase 3 throttler. `UNAUTHENTICATED` and `FORBIDDEN` are active since Phase 2, though in Phase 2 every protected route answers 401 because no real authenticator exists until Phase 3.
 
 | Code | HTTP | Default message |
 |---|---|---|
-| `UNAUTHENTICATED` | 401 | Please sign in to continue. |
-| `FORBIDDEN` | 403 | You do not have permission to do this. |
 | `CONFLICT` | 409 | This action conflicts with the current state of the record. |
 | `METHOD_NOT_ALLOWED` | 405 | This action is not allowed on this address. |
 | `RATE_LIMITED` | 429 | Too many attempts. Please wait a moment and try again. |

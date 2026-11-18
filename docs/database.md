@@ -35,7 +35,11 @@ This creates the roles, `doc_tayo` (reused if it exists) and `doc_tayo_test`, an
 | `npm run db:migrate:deploy` | CI / production |
 | `npm run db:migrate:status` | Check drift |
 
-Never edit an applied migration. Raw SQL belongs in a migration when Prisma cannot model it (exclusion constraints, `pg_trgm`, RLS). Phase 1 has no models, so there are no migrations yet.
+Never edit an applied migration. Raw SQL belongs in a migration when Prisma cannot model it (exclusion constraints, `pg_trgm`, RLS).
+
+`20261118000000_tenancy_foundation` (Phase 2) creates `users`, `permissions`, `tenants`, `branches`, `tenant_memberships`, `roles`, `role_permissions`, `membership_roles`, `audit_logs`; inserts the permission catalog rows; and ends with `REVOKE UPDATE, DELETE, TRUNCATE ON audit_logs FROM doctayo_app` (append-only, tested as the runtime role).
+
+Conventions in force: snake_case plural tables, UUIDv7 ids generated **by the client** (`@default(uuid(7))`; raw SQL inserts must supply ids), `timestamptz` timestamps with a database default, composite `(tenant_id, id)` keys for every tenant-owned table, `onDelete: Restrict` everywhere. See `docs/multitenancy.md`.
 
 ## Test database
 

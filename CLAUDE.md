@@ -6,8 +6,20 @@
      2. **Smallest change that works**: Don't refactor adjacent code unless necessary.
      3. **Follow existing patterns**: Check `src/` structure before introducing new abstractions.
      4. **Be explicit about uncertainty**: If something cannot be verified, say so.
-     5. **Todo list is mandatory for every task**: At the START of every task (before any code is read or written), create a todo list using `TaskCreate` that maps to the
-     Task Lifecycle steps. This is not optional. The todo list is what prevents early stopping and missed steps.
+     5. **Todo list is mandatory for every task**: At the START of every task (before any code is read or written), create a todo list that maps to the
+     Task Lifecycle steps below. Use the session's task tool if it has one (`TaskCreate` or `TodoWrite`); if it has none, write the checklist as the first message of the task and keep it updated as steps finish. This is not optional. The todo list is what prevents early stopping and missed steps.
+     6. **Plans and docs stay aligned with the code**: the master plan (`plan.md`), the child plans (`plans/`) and `docs/` must always describe the code as it is. See "Plans and Docs Stay Aligned With the Code" below.
+
+## Task Lifecycle
+
+The todo list for every task contains these steps (drop only those that truly do not apply, and say so):
+
+1. Understand the request and read the relevant code, plans and docs.
+2. Write the tests first and confirm they fail for the expected reason (see "Tests First").
+3. Implement the smallest change that works.
+4. Run the related tests, then the broader suite, plus lint, format check and typecheck.
+5. Update the plans and docs so they match the code (see "Plans and Docs Stay Aligned With the Code").
+6. Report: tests added, commands run and their results, plan/doc files updated, and anything not run or not verified.
 
 ## Mandatory Development Rule: Tests First
 
@@ -53,3 +65,19 @@ After implementation:
 Planning tasks do not require implementation tests to be written prematurely. However, every implementation milestone must specify its tests and acceptance criteria before implementation begins.
 
 **Priority:** This rule takes precedence over speed or convenience. Never skip test-first development to save time or tokens.
+
+## Mandatory Rule: Plans and Docs Stay Aligned With the Code
+
+**The implemented code is the source of truth. `plan.md`, every child plan in `plans/`, and the documents in `docs/` (including ADRs) must always match it. A change is not complete while any of them disagrees with the code.**
+
+- **Same change, not later.** Whenever code (or the Prisma schema, migrations, config, routes, error codes, scripts, or test layout) differs from what a plan or doc says, edit the plan/doc in the same piece of work. Do not leave drift for a follow-up.
+- **Edit the plan to match the code, never the reverse.** If implementation had to deviate from an approved plan, update the plan body so it describes what was built, and record the deviation and its reason in the child plan's "As Built" section (create one if missing). Do not silently ship a deviation, and do not bend the code back to a stale plan.
+- **Which files:**
+  - The relevant child plan in `plans/` (scope, data model, endpoints, tests, milestones, status).
+  - The master `plan.md`: current-state table (§0), the affected sections, the phase status in §10, and open questions in §15.
+  - `docs/*.md` and `docs/adr/` for behavior, conventions and decisions (add or amend an ADR when a decision changes).
+  - `README.md`, `.env.example` and `docs/environment.md` when setup or configuration changes.
+- **Replace stale text.** Remove or rewrite statements that are no longer true ("later", "not yet", "reserved", old counts, old file names). Do not just append a note beside a wrong statement.
+- **Verify before writing.** State only what was checked in the code or in a command's output. Mark anything unverified as such (principle 4).
+- **Before reporting a task done:** re-read the plan/doc sections touching the change, and in the final report list which plan and doc files were updated (or state that none needed changing).
+- **Planning work in the other direction:** an approved plan may describe code that does not exist yet; mark such parts with their phase or "planned" so they cannot be mistaken for the current state.

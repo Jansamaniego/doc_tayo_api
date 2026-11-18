@@ -57,7 +57,7 @@ export const ERROR_CODES = {
     status: HttpStatus.INTERNAL_SERVER_ERROR,
     message: 'Something went wrong on our side. Please try again.',
   },
-  // --- Reserved: cataloged now so the contract is stable; no producer yet ---
+  // --- Active in Phase 2 (guard chain) ---
   UNAUTHENTICATED: {
     status: HttpStatus.UNAUTHORIZED,
     message: 'Please sign in to continue.',
@@ -66,6 +66,23 @@ export const ERROR_CODES = {
     status: HttpStatus.FORBIDDEN,
     message: 'You do not have permission to do this.',
   },
+  TENANT_NOT_SELECTED: {
+    status: HttpStatus.FORBIDDEN,
+    message: 'Please choose a clinic to continue.',
+  },
+  TENANT_SUSPENDED: {
+    status: HttpStatus.FORBIDDEN,
+    message: "This clinic's access is currently suspended.",
+  },
+  TENANT_DEACTIVATED: {
+    status: HttpStatus.FORBIDDEN,
+    message: 'This clinic is no longer active.',
+  },
+  TENANT_ACCESS_DENIED: {
+    status: HttpStatus.FORBIDDEN,
+    message: 'You do not have access to this clinic.',
+  },
+  // --- Reserved: cataloged now so the contract is stable; no producer yet ---
   CONFLICT: {
     status: HttpStatus.CONFLICT,
     message: 'This action conflicts with the current state of the record.',

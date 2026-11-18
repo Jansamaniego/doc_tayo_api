@@ -20,6 +20,6 @@ describe('docs/error-codes.md', () => {
       ...Object.keys(ERROR_CODES),
       ...Object.keys(FIELD_ERROR_CODES),
     ]);
-    expect(documented.filter((code) => !known.has(code))).toEqual([]);
+    expect(documented.filter((code) => !known.has(code ?? ''))).toEqual([]);
   });
 });

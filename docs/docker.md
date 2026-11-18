@@ -28,7 +28,7 @@ Why here? So the app runs the same on your laptop, on GitHub, and later on a rea
 | Volume | Storage that outlives containers (database files). |
 | Port mapping | `host:container`, e.g. `5434:5432`. Host port 5434 forwards to 5432 inside the container. |
 | Compose | One file describing several containers, networks and volumes. Containers can reach each other by **service name** (`postgres`). |
-| Profile | A compose switch: services with `profiles:` start only when asked. |
+| Profile | A compose switch: services with `profiles:` start only when asked (`migrate` uses one so `up` never runs it). |
 
 ### What the Dockerfile does (5 stages)
 
@@ -49,27 +49,83 @@ Why multi-stage? Compilers and dev tools never ship, so the image is smaller and
 ### Config at runtime
 Images contain **no configuration**. Everything comes from environment variables (see [environment.md](environment.md)) — the same image runs in dev, CI and production. Never `COPY .env` into an image.
 
-### Two ways to run
+### Local architecture
 
-**Mode 1 — API container + your existing Postgres (localhost:5432)**
-```bash
-docker compose up --build api          # http://localhost:3000/api/health/ready
-docker compose run --rm migrate        # apply migrations
-docker compose down
 ```
-The container uses `network_mode: host` (Linux): your Postgres listens on `127.0.0.1` only, which a container on Docker's private bridge network cannot reach. With host networking, `localhost` inside the container *is* your machine.
-
-**Mode 2 — everything in containers (isolated)**
-```bash
-docker compose --profile isolated up --build -d postgres api-isolated
-docker compose --profile isolated run --rm migrate-isolated
-docker compose --profile isolated down -v   # -v also deletes the volume
+ your machine
+ ├─ browser / curl ─► localhost:3000 ─┐
+ ├─ DBeaver ────────► localhost:5434 ─┼──┐
+ │                                    │  │
+ │  ┌──────── Compose network ────────┼──┼───────┐
+ │  │   api  ──── postgres:5432 ─────►│  ▼       │
+ │  │ (NestJS)                    postgres (17)  │
+ │  │   migrate (one-off) ───────►    │          │
+ │  └────────────────────────────────────────────┘
+ │                                  volume: pgdata
 ```
-Here the API reaches the database by service name (`postgres:5432`), data lives in a volume, and Postgres is published on host port **5434** (connect DBeaver to `localhost:5434`, user `doctayo_app`, db `doc_tayo`). It never touches your 5432.
 
-Override connection strings for mode 1 with `DOCKER_DATABASE_URL` / `DOCKER_DATABASE_MIGRATION_URL` in your shell or `.env`.
+What **Docker Compose** does: reads `docker-compose.yml` and builds, wires and starts several containers, one network and one volume with a single command.
 
-### Useful commands
+| Service | Role |
+|---|---|
+| `postgres` | PostgreSQL 17. On the first start with an empty volume it runs `scripts/docker/postgres-init.sh`, which creates the `doctayo_owner` and `doctayo_app` roles and the databases (`scripts/db/bootstrap.sql`). |
+| `api` | The `runtime` image. Connects as `doctayo_app` (DML only). Starts only after `postgres` is healthy. |
+| `migrate` | The `migrate` image. Runs `prisma migrate deploy` as `doctayo_owner`, then exits. Never starts automatically. |
+
+**Networking.** Compose creates a private network and gives each service a DNS name equal to its service name. Inside the `api` container, `localhost` means *that container itself*, so `localhost:5432` would find nothing. The API therefore uses `postgres:5432`. Port `5432` there is Postgres's port *inside its container*.
+
+**Host access.** `127.0.0.1:5434:5432` publishes the container's 5432 on your machine's port 5434 (loopback only). Use it from DBeaver: host `localhost`, port `5434`, db `doc_tayo`, user `doctayo_app`. Port 5434 keeps clear of any Postgres already on your host's 5432. The API is published the same way as `127.0.0.1:3000`.
+
+**Volume.** `pgdata` is a named volume holding `/var/lib/postgresql/data`. Containers are disposable; the volume is not removed by `docker compose down`, so the data survives restarts and rebuilds.
+
+**Health checks and dependencies.** `postgres` has a healthcheck (`pg_isready`). `api` and `migrate` use `depends_on: condition: service_healthy`, so they wait until the database answers. The `runtime` image has its own `HEALTHCHECK` on `/api/health`; `docker compose ps` shows it.
+
+### Commands
+
+```bash
+docker compose up --build -d          # start postgres + api (builds the image)
+docker compose ps                     # service status and health
+docker compose logs -f api            # API logs
+docker compose logs -f postgres       # database logs
+docker compose run --rm migrate       # apply migrations (run after first start and after pulling new ones)
+docker compose restart api            # restart without rebuilding
+docker compose up --build -d api      # rebuild and restart only the API
+docker compose down                   # stop and remove containers; DATABASE DATA IS KEPT
+docker compose down -v                # stop AND PERMANENTLY DELETE the database volume
+```
+
+First-time setup: `docker compose up --build -d`, then `docker compose run --rm migrate`, then open `http://localhost:3000/api/health/ready`.
+
+**Reset the local database completely** (destroys all local data):
+```bash
+docker compose down -v
+docker compose up --build -d
+docker compose run --rm migrate
+```
+The init script and any `DB_*_PASSWORD` values apply only when the volume is empty, so a password change needs this reset.
+
+Compose substitutes `${VAR:-default}` from your shell or `.env`. The local defaults need no `.env`. The `DATABASE_URL` in your `.env` (host `localhost`) is for running the API outside Docker and is *not* used by Compose.
+
+### Same image, different database (production)
+
+The image contains no configuration. Locally Compose sets `DATABASE_URL=postgresql://doctayo_app:...@postgres:5432/doc_tayo`. On a server, run the same image with an external database instead (values come from the host's secret store, never from a file in Git):
+
+```bash
+docker run -d --name doctayo-api -p 3000:3000 \
+  -e NODE_ENV=production \
+  -e DATABASE_URL='postgresql://doctayo_app:<secret>@<rds-endpoint>:5432/doc_tayo' \
+  -e DATABASE_SSL=verify-full \
+  -e CORS_ALLOWED_ORIGINS=https://app.example.com \
+  -e OBSERVE_APP_KEY=... -e OBSERVE_APP_SECRET=... \
+  doc-tayo-api
+```
+Production requires TLS to the database (`DATABASE_SSL` of `require` or `verify-full`), `CORS_ALLOWED_ORIGINS` and Observe keys. `verify-full` validates the server certificate against Node's trusted CAs; if the provider uses its own CA (as RDS does), supply its bundle with Node's `NODE_EXTRA_CA_CERTS` environment variable and mount the file into the container. Run migrations as a separate step with the `migrate` image and `DATABASE_MIGRATION_URL` (owner role). The API never gets that URL.
+
+### Adding services later (e.g. Redis)
+
+Nothing Redis-related exists today. When the app needs it, the pattern is the same as for Postgres: add a service to `docker-compose.yml`, add a connection variable to the config validation, and pass it to `api` through `environment:`. The API would reach it by service name locally and by an external endpoint (e.g. a managed service) in production, with no image change.
+
+### Other useful commands
 ```bash
 docker build -t doc-tayo-api .                 # build the runtime image
 docker build --target migrate -t doc-tayo-migrate .

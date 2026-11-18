@@ -20,4 +20,4 @@ Request or response bodies · `Authorization`, `Cookie`, `Set-Cookie` · passwor
 - Observe's trace id equals the request id only when Observe is enabled and honors the custom generator; this is not verified without collector credentials. Logs always carry `requestId` explicitly regardless.
 - Server-side 5xx logs include the original error stack (including its message) in the local logs.
 - HSTS is enabled only when `NODE_ENV=production` (not covered by an e2e test because production requires TLS to the database).
-- Rate limiting, authentication, audit logging: Phase 3+.
+- Rate limiting and authentication: Phase 3. Audit logging: the append-only `audit_logs` table and `AuditService` exist since Phase 2 (tenant, branch and lifecycle events; field names only, no values); auth events and medical-record reads are not audited yet.

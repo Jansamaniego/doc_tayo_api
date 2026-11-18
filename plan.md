@@ -2,29 +2,38 @@
 
 > **Scope:** Backend only (`doc-tayo-api`). The frontend has its own independent plan. This document only describes API contracts the frontend will consume, never frontend implementation.
 >
-> **Status:** Draft for approval. No implementation starts until this plan is approved.
+> **Status:** Phases 1 (Project Foundation) and 2 (Multi-Tenancy Foundation) are **implemented**; Phases 3–7 are still plan-only and require approval of their child plans before implementation. This document was last aligned with the codebase after Phase 2 (see §0; per-phase deviations are recorded in each child plan's "As Built" section).
+>
+> **Sync rule:** this plan and the child plans describe the code **as it is**. Whenever implemented code differs from a plan, the plan is edited in the same change (see `CLAUDE.md`, "Plans and docs stay aligned with the code").
 >
 > **Child plans** (must stay consistent with this document):
-> `plans/01-multitenancy.md` · `plans/02-authentication.md` · `plans/03-user-management-and-authorization.md` · `plans/04-core-clinic-apis.md` · `plans/05-additional-clinic-apis.md`
+> `plans/00-project-foundation.md` (Phase 1, implemented) · `plans/01-multitenancy.md` (Phase 2, implemented) · `plans/02-authentication.md` · `plans/03-user-management-and-authorization.md` · `plans/04-core-clinic-apis.md` · `plans/05-additional-clinic-apis.md`
 
 ---
 
-## 0. Current State of the Project (as inspected)
+## 0. Current State of the Project
+
+The Phase 1 foundation is in place. Everything below was verified against the repository, not assumed.
 
 | Area | Current state | Implication |
 |---|---|---|
-| Framework | NestJS `12.4`, `@nestjs/platform-express` | Keep Express. `NodeAdapter` is faster but not needed now. |
-| Module system | ESM (`"type": "module"`, `nodenext`) | Relative imports end in `.js`; use `import.meta.dirname`. |
-| Language | TypeScript 6, `strict: true` | Keep strict mode. |
-| Tests | Vitest 4 (`*.spec.ts`, `*.e2e-spec.ts`), supertest | Mocks are `vi.fn()`. No Jest. |
-| Lint/format | oxlint (type-aware), Prettier | Keep. |
-| Observability | `@nestjs/observe` in `app.module.ts` (traces, logs, errors, metrics) | Use it as the logging/tracing backbone. Must enforce PHI redaction. |
-| ORM | `prisma@8.0.0-rc.33` (CLI, **pre-release**) + `@prisma/client@7.10.1` (stable) | **Mismatched major versions — decision required** (see §15, Q1). |
-| Prisma config | `prisma.config.ts` has only the Prisma 8 `skills` section | No schema, no datasource, no migrations yet. |
-| Database | Not configured (`.env` has only Observe keys) | Phase 1 adds PostgreSQL + `DATABASE_URL`. |
-| Domain code | Only the default `AppController`/`AppService` | Greenfield. |
-
-Decisions already made by the scaffold: NestJS 12, ESM, Vitest, oxlint, Express, Observe. This plan keeps all of them.
+| Framework | NestJS `12.x`, `@nestjs/platform-express` | Express kept. `NodeAdapter` is faster but not needed now. |
+| Module system | ESM (`"type": "module"`, `nodenext`), Node `>=24` (`.nvmrc` = 24) | Relative imports end in `.js`; use `import.meta.dirname`. |
+| Language | TypeScript 6, `strict: true` (`noImplicitOverride` and `noUncheckedIndexedAccess` enabled in Phase 2, ADR-0002 amended) | Done (plans/01-multitenancy.md D6). |
+| Tests | Vitest 4: unit (`src/**/*.spec.ts`, `test/architecture/**`) and e2e (`test/**/*.e2e-spec.ts`, real PostgreSQL), supertest | Mocks are `vi.fn()`. No Jest. |
+| Lint/format | oxlint (type-aware) + Prettier. **ESLint is not used** (ADR-0006) | Rules oxlint cannot express live in `test/architecture/forbidden-patterns.spec.ts`. |
+| ORM | **Prisma `7.10.1` pinned exactly** for `prisma`, `@prisma/client` and `@prisma/adapter-pg` (ADR-0001). Prisma 8 RC removed | Do not run `npm i prisma@latest` (it installs the 8 RC). |
+| Prisma layout | `prisma.config.ts` (Prisma 7 `defineConfig`; datasource URL = `DATABASE_MIGRATION_URL`, loads `.env` itself); schema folder `prisma/schema/` (`base.prisma`, `identity.prisma`, `tenancy.prisma`, `audit.prisma`); migration `tenancy_foundation`; generated client in `src/generated/prisma` (gitignored) | Phase 2 added the tenancy models. |
+| Database | PostgreSQL 17. Roles: `doctayo_owner` (migrations), `doctayo_app` (runtime, DML only, `NOBYPASSRLS`). `scripts/db/bootstrap.sql` is idempotent. `PrismaService` fails fast on connect and refuses to start in production if its role is a superuser or bypasses RLS | Role separation (needed for a future RLS option) exists from day one. |
+| Config | `src/config` validates every env var at boot with `class-validator` and exposes typed namespaces `app`, `database`, `cors`, `logging`, `swagger`, `observe`. Only `src/config` and tests may touch `process` (lint rule) | The app refuses to start on invalid config; errors name variables, never values. |
+| HTTP foundation | `app.setup.ts` applies request id, access log, Helmet, CORS, 1 MB JSON limit, global prefix `api` + URI versioning (default `v1`), global `ValidationPipe`, `AllExceptionsFilter`, Swagger, shutdown hooks. `main.ts` and the e2e tests share it | Tests exercise the real stack. |
+| Errors | One envelope `{ error: { status, code, message, details?, requestId } }`, stable code catalog (`src/common/errors/error-codes.ts`, `docs/error-codes.md`), `DomainError`. Active since Phase 2: `UNAUTHENTICATED`, `FORBIDDEN`, `TENANT_NOT_SELECTED`, `TENANT_SUSPENDED`, `TENANT_DEACTIVATED`, `TENANT_ACCESS_DENIED`. `CONFLICT` is produced by the tenant lifecycle service. `RATE_LIMITED` (429) and `METHOD_NOT_ALLOWED` (405) are only mapped from framework exceptions; nothing throws 429 until the Phase 3 throttler | Success envelopes (`{ data }`, `{ data, meta }`) are returned explicitly by controllers; no global wrapping interceptor (ADR-0005). |
+| Observability | `@nestjs/observe` configured with PHI redaction, request-body capture off, header allow-list, query strings obfuscated, `forwardLogs` off. Request ids are server-validated UUIDs (ADR-0004) | Observe is enabled by default only in production. |
+| Health | `GET /api/health` (liveness, no dependencies) and `GET /api/health/ready` (real `SELECT 1`, 1 s timeout, up/down only), version-neutral, via `@nestjs/terminus` | `@Public()` (Phase 2), so it stays reachable under the deny-by-default guards. |
+| Docker | Multi-stage `Dockerfile` (`runtime` and `migrate` targets, non-root, `HEALTHCHECK`); a single local Compose stack (`api`, `postgres`, one-off `migrate`); CI builds both targets | See §2.1. |
+| CI | GitHub Actions: lint, format check, typecheck, unit tests, bootstrap DB, `migrate deploy`, e2e against Postgres 17, build, informational `npm audit`, Docker build | |
+| Domain code | Tenancy foundation (Phase 2): tenants, memberships, roles, branches, audit, request context, guards (`AuthGuard` -> `TenantGuard` -> `PermissionsGuard`), `TenantPrismaService`. No login yet (production authenticator is `DenyAllAuthenticator`, so every protected route answers `401`); no clinic data | Phase 3 adds authentication. |
+| Not installed (by design) | Redis, queues, `@nestjs/throttler`, `@nestjs/jwt`, `argon2`, `@nestjs/schedule`, `@nestjs/mail`, any AWS SDK | Added only in the phase that needs them. |
 
 ---
 
@@ -50,25 +59,42 @@ Decisions already made by the scaffold: NestJS 12, ESM, Vitest, oxlint, Express,
 |---|---|---|
 | Framework | NestJS 12 (existing) | Prefer first-party `@nestjs/*` packages (see AGENTS.md). |
 | Language | TypeScript (strict, ESM) | |
-| ORM | Prisma | Version decision pending (Q1). Recommended: matched stable Prisma 7.x CLI + client with the `pg` driver adapter. |
-| Database | PostgreSQL 17+ (18 preferred) | Single database, `public` schema. |
-| API docs | `@nestjs/swagger` | OpenAPI 3; served at `/api/docs` in non-production only (or behind auth). |
-| Validation | DTOs + `class-validator` / `class-transformer` via global `ValidationPipe` | `whitelist: true`, `forbidNonWhitelisted: true`, `transform: true`. |
-| Config | `@nestjs/config` with schema-validated env at startup | App refuses to boot with invalid config. |
+| ORM | Prisma `7.10.1` (pinned) + `@prisma/adapter-pg` | **Installed.** Decision recorded in ADR-0001; revisit Prisma 8 only when GA with matching client and adapter. |
+| Database | PostgreSQL 17 (local Compose and CI); any managed PostgreSQL ≥ 15 that allows creating roles | Single database, `public` schema. |
+| API docs | `@nestjs/swagger` (**installed**) | OpenAPI 3; served at `/api/docs`; on by default outside production, off in production (`SWAGGER_ENABLED`). |
+| Validation | DTOs + `class-validator` / `class-transformer` via global `ValidationPipe` (**installed**) | `whitelist: true`, `forbidNonWhitelisted: true`, `transform: true`, implicit conversion off. |
+| Config | `@nestjs/config` with schema-validated env at startup (**installed**) | App refuses to boot with invalid config. Environment-driven so one image runs in every environment (§2.1). |
 | Auth | JWT (`@nestjs/jwt`, or `@nestjs/authentication` after evaluation) | Evaluate first-party `@nestjs/authentication`/`@nestjs/authorization` at Phase 3/4 start; adopt if they fit the design here, otherwise implement guards directly. |
 | Password hashing | Argon2id (`argon2` package) | OWASP-recommended parameters (§8.1). |
-| Rate limiting | `@nestjs/throttler` | In-memory store while single-instance; shared store when scaled out. |
-| Health checks | `@nestjs/terminus` | `/api/health` (liveness), `/api/health/ready` (DB). |
+| Rate limiting | `@nestjs/throttler` (**planned, Phase 3**) | In-memory store while single-instance; a shared store (for example Redis) only when scaled out and only once Redis is actually adopted. |
+| Health checks | `@nestjs/terminus` (**installed**) | `/api/health` (liveness), `/api/health/ready` (DB). |
 | Scheduled work | `@nestjs/schedule` (+ `@nestjs/locks` when multi-instance) | Token cleanup, reminders. |
 | Async side effects | Transactional outbox (evaluate `@nestjs/outbox`) | Emails/SMS sent after commit. No Redis until justified. |
 | Idempotency | Evaluate `@nestjs/idempotency` | For appointment booking and payments. |
 | Email | `@nestjs/mail` | Provider TBD (Q6). |
-| Observability | `@nestjs/observe` (existing) | |
-| Security headers | `helmet` | |
+| Observability | `@nestjs/observe` (**installed**) | Redaction and header/body capture rules in `src/observability/observe.ts`. |
+| Security headers | `helmet` (**installed**) | Strict CSP; relaxed only on `/api/docs`. HSTS in production only. |
 
-**Explicitly not introduced:** Redis, message brokers, separate auth database, separate schemas per tenant, GraphQL, microservices, a second ORM.
+**Explicitly not introduced (and not to be added speculatively):** Redis, message brokers, AWS SDKs or infrastructure-as-code, separate auth database, separate schemas per tenant, GraphQL, microservices, a second ORM.
 
 > Uncertainty: NestJS 12 first-party packages listed in AGENTS.md (`@nestjs/authentication`, `@nestjs/authorization`, `@nestjs/outbox`, `@nestjs/idempotency`, `@nestjs/mail`) were not verified in detail for this plan. Each child plan must confirm the API against https://docs.nestjs.com before adopting it.
+
+### 2.1 Runtime environments and Docker
+
+**One image, configured by environment variables.** The `runtime` image contains no configuration and no secrets; the same image runs locally, in CI and in production. Differences come only from env vars (validated at boot, see `docs/environment.md`).
+
+| | Local development (implemented) | Production (target, not provisioned) |
+|---|---|---|
+| API | `api` service in Docker Compose, `NODE_ENV=development`, published on `127.0.0.1:3000` | The same image on a container host (for example AWS EC2) with `NODE_ENV=production` |
+| PostgreSQL | `postgres` service (`postgres:17-alpine`), reached by the API at `postgres:5432` over the Compose network; data in the named volume `pgdata`; published on `127.0.0.1:5434` for DBeaver | External managed PostgreSQL (for example AWS RDS) supplied through `DATABASE_URL` |
+| DB TLS | `DATABASE_SSL=disable` (private Docker network) | `require` or `verify-full` (validation rejects `disable` in production). A provider-specific CA bundle is supplied through Node's `NODE_EXTRA_CA_CERTS`, which needs no code change |
+| Migrations | `docker compose run --rm migrate` (one-off job, owner role, waits for a healthy database, never runs on API start) | A separate release step using the `migrate` image with `DATABASE_MIGRATION_URL`. The running API never receives the owner credentials |
+| Secrets | Throwaway dev defaults in `docker-compose.yml`, overridable via `DB_OWNER_PASSWORD`, `DB_APP_PASSWORD`, `POSTGRES_SUPERUSER_PASSWORD`; `.env` is gitignored and not used by Compose for the API's database URL | From the host's secret store; never in a Dockerfile, Compose file or Git |
+| Other services | None | None yet |
+
+Local Compose services: `api`, `postgres`, `migrate` (profile `tools`, so `up` never runs it). Commands: `docker compose up --build -d`, `docker compose run --rm migrate`, `docker compose down` (keeps data), `docker compose down -v` (**deletes the database volume**). Full guide: `docs/docker.md`; rationale: ADR-0007.
+
+**Redis (future, not implemented).** Nothing in the repository references Redis. If it is adopted (for example for shared rate limiting or queues), the change is additive: a new service in Compose, a new validated connection variable in `src/config`, and an `environment:` entry on `api`; locally it would be reached by service name and in production through a managed endpoint, with no image change. The same applies to any other external dependency. Do not add Redis packages, services or variables before a feature needs them.
 
 ---
 
@@ -97,6 +123,8 @@ Decisions already made by the scaffold: NestJS 12, ESM, Vitest, oxlint, Express,
 
 Rule: **every table that holds tenant data has its own `tenant_id` column — including join tables.** No table infers its tenant only through a parent. This keeps scoping uniform and makes RLS possible later without schema changes.
 
+**As built (Phase 2):** these tables exist: `users`, `permissions`, `tenants`, `branches`, `tenant_memberships`, `roles`, `role_permissions`, `membership_roles`, `audit_logs`. `sessions` and `user_tokens` arrive with Phase 3 (authentication); `invitations` with Phase 3 (plans/01 D2); clinic tables from Phase 5. `audit_logs.tenant_id` is nullable, so `audit_logs` is attributed to a tenant but is **not** in the tenant-owned model registry (audit rows are written through `AuditService`, see §8 item 13).
+
 ### 3.3 Tenant context: how a request gets its tenant
 
 **Recommended approach: guard + request-scoped context store (AsyncLocalStorage), not middleware alone.**
@@ -105,13 +133,15 @@ Rule: **every table that holds tenant data has its own `tenant_id` column — in
 2. If the user has exactly one active membership, it becomes the active tenant automatically. Otherwise the client calls `POST /api/v1/auth/switch-tenant`.
 3. The server verifies an **active membership** in an **active tenant**, records `active_tenant_id` on the session, and issues a new access token carrying `tid` (tenant id).
 4. On every request, `TenantGuard` (runs after authentication):
-   - reads `tid` from the verified token (never from a body/query/header);
-   - re-verifies in one indexed query that the session is still active, the membership is still active, and the tenant is still active;
+   - reads the active tenant from the authenticated principal (`tid` in the verified token once Phase 3 exists; never from a body/query/header);
+   - re-verifies in one query that the user is `active`, the membership is `active`, and the tenant is not suspended/deactivated (Phase 2: one parameterized `$queryRaw` joining membership, user, tenant and effective permissions; Phase 3 adds the session check);
    - loads the membership's effective permissions;
    - stores `{ userId, sessionId, tenantId, membershipId, permissions }` in a `RequestContext` (AsyncLocalStorage).
 5. Services and the tenant-scoped Prisma client read the tenant from `RequestContext`. **Tenant id is never a method parameter supplied by controllers.**
 
-Why a guard and not middleware: guards run after authentication, have access to route metadata (`@Public()`, `@TenantNotRequired()`), and can return proper 401/403. Middleware is used only for cross-cutting non-auth concerns (request id, security headers).
+**Principal types (portal-ready).** The access token carries a principal-type claim (`staff` or `patient`). Staff principals go through the membership flow above. Patient-portal principals have no membership; they are authorized by `patient_portal_links` and every portal query is filtered to the caller's linked patient ids (row-level ownership, which RBAC cannot express). Each controller group accepts exactly one principal type, so a patient token can never reach staff endpoints and vice versa. The portal itself is a later phase; Phase 2 and 3 only avoid assumptions that would block it.
+
+Why a guard and not middleware: guards run after authentication, have access to route metadata (`@Public()`, `@TenantNotRequired()`), and can return proper 401/403. Middleware is used only for cross-cutting non-auth concerns: request id, security headers, and the `RequestContext` store, whose AsyncLocalStorage middleware is mounted by `TenancyModule` after the body parsers (Node loses the context across body-parser's socket events if it runs earlier). Guards fill that store; the middleware itself decides nothing.
 
 Why tenant-in-token rather than tenant-in-URL or `X-Tenant-Id` header: one source of truth bound to a server-side session, simpler API paths (`/api/v1/patients`), no client-supplied tenant id to validate. Trade-off: one session = one active tenant at a time (separate logins/sessions are needed for simultaneous work in two clinics). Acceptable for the target users.
 
@@ -119,27 +149,31 @@ Route categories (every route must be exactly one — enforced by a test, §11.6
 - `@Public()` — no auth (login, refresh, password reset, health).
 - `@TenantNotRequired()` — authenticated, no active tenant needed (`/me`, `/me/memberships`, switch-tenant, create tenant).
 - Default — authenticated **and** tenant-scoped.
-- `@PlatformAdmin()` — platform operator routes under `/api/v1/admin/*`.
+- `@PlatformAdmin()` — platform operator routes under `/api/v1/admin/*` (**Phase 4**; not implemented yet).
+
+As built in Phase 2: `@Public()`, `@TenantNotRequired()` and `@RequirePermissions(...)`; the default category (tenant-scoped) must declare permissions, otherwise `PermissionsGuard` denies the route (`test/route-registry.e2e-spec.ts`).
 
 ### 3.4 Enforcing isolation without relying on developer memory
 
 - **Tenant-scoped Prisma client** (Prisma Client extension): for every model in a registry of tenant-owned models, it injects `tenantId` from `RequestContext` into `where` for reads/updates/deletes and into `data` for creates. If a tenant-owned model is queried with no tenant in context, it **throws**.
-- **Unscoped access is explicit**: the raw `PrismaService` is only injectable in identity/platform modules (`auth`, `users`, `tenants`, `admin`). Domain modules receive only the tenant-scoped client. Lint/test checks enforce this (§11.6).
-- **`findUnique` by id is replaced by tenant-aware lookups** (`findFirst({ where: { id } })` through the scoped client, or composite unique `tenantId_id`).
+- **Unscoped access is explicit**: the raw `PrismaService` is only injectable in an allow-list of modules: today `health`, `tenancy`, `tenants`, `audit`, `access-control`; later `auth`, `users`, `admin`. Domain modules (`branches`, and later `patients`, …) receive only `TenantPrismaService`. `test/architecture/prisma-access.spec.ts` enforces this (§11.6).
+- **Unique lookups stay tenant-safe**: the extension adds `tenantId` to the `where` of `findUnique`, `update`, `delete` and `upsert` (Prisma accepts extra non-unique fields in a unique filter; verified in the Phase 2 spike), so a foreign id behaves as not found.
+- **`TenantPrismaService` wraps the extended client** and exposes only model delegates and `$transaction`, because the extended client itself would hand out `$queryRaw`. It throws when no tenant is in context, forbids a conflicting or changed `tenantId`, and refuses update/delete on append-only models (`AuditLog`).
 - **Composite foreign keys** (§6.4) make cross-tenant references fail at the database even if application code is wrong.
 - **Raw SQL** (`$queryRaw`) is allowed only in repositories with explicit `tenant_id` predicates and requires review; a test asserts tenant filtering for each raw query.
-- **Known limitation**: Prisma extensions do not cover every nested-write/relation-filter path perfectly. Mitigation: composite FKs + isolation test matrix (§11.5). Child plan 01 must document exactly which operations the extension covers.
+- **Known limitation**: Prisma extensions do not rewrite nested writes or relation filters/includes. Mitigation: composite FKs (verified: cross-tenant nested `connect` and scalar creates are rejected by the database) + isolation tests (§11.5). The exact operation coverage is documented in `plans/01-multitenancy.md` §7.2 and `docs/multitenancy.md`.
+- **Prisma promises are lazy**: the tenant is read when a query executes, so queries must be awaited inside the request (documented in `docs/multitenancy.md`).
 
 ### 3.5 Tenant lifecycle
 
 | Stage | Behavior |
 |---|---|
-| **Creation / onboarding** | One transaction creates: tenant (`status = active`), default branch, default roles from templates, owner membership for the creating user, audit entry. Initially **provisioned by a platform admin** (controlled pilot); a self-service signup endpoint can be enabled later by config (Q3). |
+| **Creation / onboarding** | One transaction creates: the owner user (found by normalized email, else created with `status = pending` until Phase 3 sets credentials), tenant (`status = active`), default branch (`Main`), the five system roles from templates, owner membership (`active`) and an audit entry. **Phase 2: a service only (`TenantOnboardingService`), no HTTP endpoint**; the endpoint is `POST /api/v1/admin/tenants` in Phase 4. Initially **provisioned by a platform admin** (controlled pilot); a self-service signup endpoint can be enabled later by config (Q3). |
 | **Configuration** | Owner/admin manages profile (name, contact, timezone default `Asia/Manila`), branches, staff invitations, roles. |
 | **Membership management** | Invite by email → `invitations` row (hashed token, 7-day expiry) → acceptance creates/activates membership. Statuses: `invited`, `active`, `suspended`, `removed`. Invariant: a tenant always has ≥ 1 active owner; the last owner cannot be removed or demoted. |
 | **Switching** | `POST /auth/switch-tenant` (§3.3). Last-used tenant stored on the session for convenience. |
-| **Suspension** | `status = suspended` (e.g., non-payment, investigation): all tenant-scoped requests return `403 TENANT_SUSPENDED`; data untouched. Reversible. |
-| **Deactivation** | `status = deactivated` at owner/platform request: access blocked, data export offered, data retained for the retention period (§8.13). |
+| **Suspension** | `status = suspended` (e.g., non-payment, investigation): active members' tenant-scoped requests return `403 TENANT_SUSPENDED`; non-members get `TENANT_ACCESS_DENIED` (the state is not revealed to them); data untouched. Reversible. Service: `TenantLifecycleService.suspend/reactivate` (audited; no HTTP endpoint in Phase 2; no free-text reason because `audit_logs` stores field names only). |
+| **Deactivation** | `status = deactivated` at owner/platform request: access blocked (`403 TENANT_DEACTIVATED`), data export offered, data retained for the retention period (§8.13). One-way in Phase 2. |
 | **Deletion** | Only after retention period, by platform admin, as a documented, audited purge job. Never an API `DELETE` on tenants. |
 
 ### 3.6 PostgreSQL Row-Level Security (RLS) — assessment
@@ -205,24 +239,24 @@ Authentication knows nothing about clinic business logic; it lives in the same d
 
 ### 5.1 Model
 
-- **Permissions** — a global, code-defined catalog (seeded, not user-editable), keyed as `resource.action`: `patients.read`, `patients.write`, `medical_records.read`, `medical_records.write`, `prescriptions.issue`, `appointments.manage`, `billing.manage`, `members.manage`, `roles.manage`, `branches.manage`, `audit_logs.read`, `tenant.settings.manage`…
-- **Roles** — **tenant-owned**. On tenant creation, default roles are created from code-defined templates: Clinic Owner, Clinic Administrator, Doctor, Nurse, Receptionist. Roles have `is_system` (template-derived; protected from deletion) and a stable `key`.
+- **Permissions** — a global, code-defined catalog (`src/modules/access-control/catalog.ts`; rows inserted by the migration that introduces a key, checked against the table by a test; not user-editable), keyed as `resource.action`. **Phase 2 catalog (four keys): `tenant.read`, `tenant.settings.manage`, `branches.read`, `branches.manage`**; each later phase appends its own. Target catalog: `patients.read`, `patients.write`, `medical_records.read`, `medical_records.write`, `prescriptions.issue`, `appointments.manage`, `billing.manage`, `members.manage`, `roles.manage`, `branches.manage`, `audit_logs.read`, `tenant.settings.manage`…
+- **Roles** — **tenant-owned**. On tenant creation, default roles are created from code-defined templates: Clinic Owner, Clinic Administrator, Doctor, Nurse, Receptionist. Roles have `is_system` (template-derived; protected from deletion) and a stable `key` (`owner`, `clinic_admin`, `doctor`, `nurse`, `receptionist`). Phase 2 templates: owner and clinic_admin hold every permission; doctor, nurse and receptionist hold read-only permissions.
 - **Role permissions** — `role_permissions (tenant_id, role_id, permission_id)`.
 - **Membership roles** — `membership_roles (tenant_id, membership_id, role_id)`. Roles attach to the membership (user-in-tenant), which is how "different roles in different tenants" works. This replaces the proposed `user_roles` table.
-- **Platform (global) roles** — minimal: a `platform_role` on `users` (`none`, `platform_admin`, optionally `support`). Platform admins manage tenants and accounts via `/api/v1/admin/*`; they do **not** automatically get access to tenant clinical data.
+- **Platform (global) roles** — minimal: a `platform_role` enum on `users` (`none`, `platform_admin`; `support` not added). The column exists since Phase 2; nothing reads it until Phase 4. Platform admins manage tenants and accounts via `/api/v1/admin/*`; they do **not** automatically get access to tenant clinical data.
 - **Custom roles** — the schema supports tenant-defined roles from day one; the **API for creating/editing custom roles is a future enhancement**. Initially tenants assign the default roles only.
 
 ### 5.2 Enforcement in NestJS
 
 Global guard order:
 
-1. `ThrottlerGuard`
-2. `JwtAuthGuard` — verifies the token; skipped for `@Public()`.
-3. `TenantGuard` — membership/session/tenant validation; populates `RequestContext`; skipped for `@TenantNotRequired()`.
-4. `PermissionsGuard` — checks `@RequirePermissions('patients.write')` against the context. **A tenant-scoped route without `@RequirePermissions` fails the route-registry test** (deny by default).
+1. `ThrottlerGuard` (Phase 3)
+2. `AuthGuard` (Phase 2) — asks the pluggable `Authenticator` for the principal; skipped for `@Public()`. Production binding in Phase 2 is `DenyAllAuthenticator` (always `401`); Phase 3 replaces it with the JWT authenticator. Tests bind `TestAuthenticator` from `test/support/`.
+3. `TenantGuard` — membership/tenant validation (session check in Phase 3); populates `RequestContext`; skipped for `@Public()` and `@TenantNotRequired()`.
+4. `PermissionsGuard` — checks `@RequirePermissions('patients.write')` against the context. **A tenant-scoped route without `@RequirePermissions` is denied at runtime and fails the route-registry test** (deny by default).
 5. **Resource-level checks** in services, through small policy functions per domain (e.g., `EncounterPolicy.canAmend(ctx, encounter)`), not ad-hoc `if`s in controllers.
 
-Cross-tenant access to a record returns **404 Not Found**, not 403, so record existence is not leaked.
+Cross-tenant access to a record returns **404 Not Found**, not 403, so record existence is not leaked. (As built in Phase 2 the 404 is not yet logged as a security event; only `TenantGuard` membership denials are logged, with ids only.)
 
 ---
 
@@ -236,7 +270,7 @@ Cross-tenant access to a record returns **404 Not Found**, not 403, so record ex
 | Columns | `snake_case` via `@map`; Prisma fields are `camelCase`, models `PascalCase` singular. |
 | Primary keys | `id UUID`, UUIDv7 generated by Prisma (`@default(uuid(7)) @db.Uuid`) — time-ordered, index-friendly, non-guessable enough to not reveal counts. |
 | Foreign keys | `<entity>_id`, always with a real FK constraint and an index. |
-| Timestamps | `created_at`, `updated_at` as `timestamptz` on every table; all stored in UTC. |
+| Timestamps | `created_at`, `updated_at` as `timestamptz` on every table (`@default(now()) @updatedAt`, so raw inserts also get a value); all stored in UTC. Exception: `audit_logs` has `occurred_at` and no `updated_at` (append-only). |
 | Calendar dates | `date` type (e.g., `birth_date`) — never a timestamp. |
 | Money | `numeric(12,2)` + `currency` (`PHP` default). Never floating point. |
 | Enums | PostgreSQL enums via Prisma for stable sets (statuses); lookup tables for tenant-configurable sets. |
@@ -245,30 +279,30 @@ Cross-tenant access to a record returns **404 Not Found**, not 403, so record ex
 | Phone numbers | Stored normalized E.164 (`+63…`). |
 | Optimistic locking | `version INT` on concurrently edited records (appointments, encounters, invoices). |
 | Audit columns | `created_by_membership_id` / `updated_by_membership_id` on clinical and financial records. |
-| Prisma schema files | Multi-file schema, one file per domain (`prisma/schema/identity.prisma`, `tenancy.prisma`, `patients.prisma`…). |
+| Prisma schema files | Multi-file schema in `prisma/schema/`: `base.prisma` (generator + datasource), `identity.prisma` (`User`, `Permission`), `tenancy.prisma` (`Tenant`, `Branch`, `TenantMembership`, `Role`, `RolePermission`, `MembershipRole`) and `audit.prisma` (`AuditLog`) exist; one file per later domain (`patients.prisma`…). The datasource URL is not in the schema: Prisma 7 reads it from `prisma.config.ts` (CLI) and the driver adapter (runtime). The generated client is `src/generated/prisma` (gitignored; `npm run db:generate`). |
 
 ### 6.2 Foundational entities (outline only — finalized in child plans)
 
 | Table | Scope | Purpose / key constraints |
 |---|---|---|
-| `users` | Global | Identity, `email` unique, `password_hash` (globally omitted from Prisma results), `status`, `platform_role`, `email_verified_at`, `failed_login_count`, `locked_until`. |
-| `sessions` | Global | Refresh token hash, family id, `active_tenant_id`, user agent, IP, `last_used_at`, `expires_at`, `revoked_at`. |
-| `user_tokens` | Global | Hashed single-use tokens, `type` (`email_verification`, `password_reset`), `expires_at`, `used_at`. |
-| `tenants` | Global (the root) | Name, slug unique, status, default timezone, contact details. |
-| `branches` | Tenant | `UNIQUE(tenant_id, name)`, address, timezone override, status. |
+| `users` | Global | **Phase 2:** `email` (required, unique, normalized), `full_name`, `status` (`pending` \| `active` \| `deactivated`), `platform_role` (`none` \| `platform_admin`). **Phase 3 adds:** `password_hash` (globally omitted from Prisma results), `email_verified_at`, `failed_login_count`, `locked_until`. |
+| `sessions` | Global (Phase 3) | Refresh token hash, family id, `active_tenant_id`, user agent, IP, `last_used_at`, `expires_at`, `revoked_at`. |
+| `user_tokens` | Global (Phase 3) | Hashed single-use tokens, `type` (`email_verification`, `password_reset`), `expires_at`, `used_at`. |
+| `tenants` | Global (the root) | `name`, `slug` (the only unique column; two clinics may share a name), `status` (`active` \| `suspended` \| `deactivated`), `timezone` (default `Asia/Manila`), `contact_email?`, `contact_phone?`. |
+| `branches` | Tenant | `UNIQUE(tenant_id, name)`, `address_line?`, `city?`, `province?`, `timezone?` override, `is_active`. |
 | `tenant_memberships` | Tenant | `UNIQUE(tenant_id, user_id)`, status, job title, joined/removed dates. |
-| `invitations` | Tenant | Email, intended roles, hashed token, expiry, accepted/revoked timestamps. |
+| `invitations` | Tenant (Phase 3) | Email, intended roles, hashed token, expiry, accepted/revoked timestamps. |
 | `permissions` | Global | `key` unique, description. Seeded from code. |
 | `roles` | Tenant | `UNIQUE(tenant_id, key)`, `is_system`. |
-| `role_permissions` | Tenant | PK `(role_id, permission_id)`. |
-| `membership_roles` | Tenant | PK `(membership_id, role_id)`. |
-| `audit_logs` | Tenant (nullable for platform events) | Append-only (§8.12). |
+| `role_permissions` | Tenant | PK `(role_id, permission_id)` plus a non-PK `id` with `UNIQUE(tenant_id, id)` so the tenant-owned rule has no exceptions. |
+| `membership_roles` | Tenant | PK `(membership_id, role_id)` plus the same non-PK `id`. |
+| `audit_logs` | Tenant-attributed (`tenant_id` nullable for platform events; not in the tenant-owned registry) | Append-only (§8 item 13): `action`, `entity_type`, `entity_id?`, `changed_fields text[]` (names only), `actor_user_id?`, `actor_membership_id?`, `request_id?`, `ip?`, `occurred_at`. |
 
 ### 6.3 Future clinic entities — rationalized
 
 | Proposed | Decision |
 |---|---|
-| Patients | `patients` — tenant-owned **records**, not login accounts. The same person at two clinics is two separate patient records (no cross-tenant patient identity — a privacy decision). Optional `user_id` link reserved for a future patient portal. |
+| Patients | `patients` — tenant-owned **records**, not login accounts. The same person at two clinics is two separate patient records (no cross-tenant patient identity — a privacy decision). A **patient portal is planned**: portal access is modelled by a tenant-owned `patient_portal_links` table (`tenant_id`, `patient_id`, `user_id`, `relationship` such as self/guardian, `status`; `UNIQUE(tenant_id, patient_id, user_id)`; composite FK to `patients`), not a single `patients.user_id` column, so one user can manage several patient records (e.g. a parent) and the link can be claimed, revoked and audited. Patients are **not** tenant members: they get no `tenant_memberships` row and no staff roles (see §3.3 principal types). |
 | Doctors / Staff | **No separate `doctors` or `staff` tables duplicating people.** Staff = `tenant_memberships`. Doctor-specific data (PRC license no., specialization, PTR/S2 numbers, schedules) lives in `practitioner_profiles` (1:1 with membership). Doctors are identified by having the Doctor role + a practitioner profile. |
 | Appointments | `appointments` — branch, patient, practitioner membership, optional service, `starts_at`/`ends_at`, status state machine. Double-booking prevented by a PostgreSQL **exclusion constraint** (added via raw SQL in the migration; Prisma cannot express it). |
 | Medical records | Anchored on **`encounters`** (a visit/consultation) with clinical notes, vital signs, attachments metadata. Finalized notes are immutable; corrections are **amendments** (new rows linked to the original). |
@@ -281,7 +315,7 @@ Cross-tenant access to a record returns **404 Not Found**, not 403, so record ex
 
 ### 6.4 Cross-tenant integrity (database level)
 
-- Every tenant-owned table declares `@@unique([tenantId, id])`.
+- Every tenant-owned table declares `@@unique([tenantId, id])` (enforced by `test/architecture/tenant-registry.spec.ts`, which parses `prisma/schema/*.prisma` because Prisma 7's generated client exposes no `dmmf`).
 - Every reference between tenant-owned tables is a **composite FK**: e.g., `appointments(tenant_id, patient_id) → patients(tenant_id, id)`. A row in tenant A physically cannot reference a row in tenant B.
 - Tenant-aware uniqueness: business identifiers are unique per tenant, e.g., `UNIQUE(tenant_id, patient_number)`, `UNIQUE(tenant_id, invoice_number)`.
 - Indexes lead with `tenant_id` (e.g., `(tenant_id, last_name, first_name)`, `(tenant_id, branch_id, starts_at)`).
@@ -302,10 +336,11 @@ No global "soft delete" magic: each model's archival behavior is explicit in its
 
 ### 6.6 Migrations
 
-- `prisma migrate dev` locally; `prisma migrate deploy` in the release pipeline; migrations committed and reviewed.
+- `prisma migrate dev` locally (`npm run db:migrate:dev -- --name <name>`); `prisma migrate deploy` in CI and the release pipeline (`npm run db:migrate:deploy`, or `docker compose run --rm migrate` locally); migrations committed and reviewed. The first migration, `20261118000000_tenancy_foundation`, arrived with Phase 2.
 - Raw SQL in migrations for what Prisma cannot model (exclusion constraints, `pg_trgm`, check constraints, future RLS policies).
-- Migrations run as the DB owner role; the app runs as a restricted role (§3.6).
-- Seeds: permissions catalog and role templates (idempotent); dev-only demo data in a separate script that refuses to run in production.
+- **Role separation is already in place.** Migrations run as `doctayo_owner` (`DATABASE_MIGRATION_URL`, read by `prisma.config.ts`, CI and test setup, never by the app); the API runs as `doctayo_app` (`DATABASE_URL`: DML only, no DDL, not superuser, `NOBYPASSRLS`). Default privileges give the runtime role access to tables the owner creates later, so migrations need no per-table grants. Roles and grants come from `scripts/db/bootstrap.sql` (idempotent; run once by an admin, automatically by the Compose `postgres` container on first start of an empty volume).
+- Migrations are never run automatically when the API starts.
+- Seeds: there is no seed step. Permission rows are inserted by the migration that introduces a key (checked against the code catalog by a test); role templates live in code and are applied during tenant onboarding. Dev-only demo data, if ever needed, goes in a separate script that refuses to run in production.
 
 ---
 
@@ -313,7 +348,7 @@ No global "soft delete" magic: each model's archival behavior is explicit in its
 
 ### 7.1 General
 
-- Base path: `/api/v1` (Nest global prefix `api` + URI versioning). Breaking changes → `/api/v2` for affected resources only.
+- Base path: `/api/v1` (Nest global prefix `api` + URI versioning, default version `1`; **implemented**). Breaking changes → `/api/v2` for affected resources only. Health endpoints are version-neutral: `/api/health`, `/api/health/ready`.
 - Resource nouns, plural, kebab-case: `/patients`, `/tenant-memberships` → simplified as `/members`.
 - Tenant is **implicit** from the session (§3.3). No `tenantId` in paths or bodies of tenant-scoped routes.
 - JSON, `camelCase` fields. IDs are UUID strings.
@@ -359,7 +394,7 @@ No global "soft delete" magic: each model's archival behavior is explicit in its
 }
 ```
 
-Error `code`s are a documented, stable catalog (`docs/error-codes.md`). The frontend maps codes to friendly, large-print messages; the backend's `message` is a plain-language fallback. Stack traces, SQL, and Prisma error text are never returned.
+The error envelope is **implemented**. Error `code`s are a documented, append-only catalog (`docs/error-codes.md`, source `src/common/errors/error-codes.ts`, kept in sync by a unit test). Codes named elsewhere in this plan (`INVALID_CREDENTIALS`, `VERSION_CONFLICT`…) are added to the catalog by the phase that produces them. Phase 2 added `TENANT_NOT_SELECTED`, `TENANT_SUSPENDED`, `TENANT_DEACTIVATED` and `TENANT_ACCESS_DENIED` and activated `UNAUTHENTICATED` and `FORBIDDEN`; `CONFLICT`, `METHOD_NOT_ALLOWED` and `RATE_LIMITED` are cataloged (see `docs/error-codes.md` for which is produced where). The frontend maps codes to friendly, large-print messages; the backend's `message` is a plain-language fallback. Stack traces, SQL, and Prisma error text are never returned.
 
 ### 7.4 Pagination, filtering, sorting, searching
 
@@ -403,11 +438,12 @@ GET    /api/v1/me/sessions
 DELETE /api/v1/me/sessions/:sessionId
 
 # Tenant (active tenant)
-GET    /api/v1/tenant
-PATCH  /api/v1/tenant
-GET    /api/v1/branches
-POST   /api/v1/branches
-PATCH  /api/v1/branches/:branchId
+GET    /api/v1/tenant                            (implemented, Phase 2)
+PATCH  /api/v1/tenant                            (implemented)
+GET    /api/v1/branches                          (implemented, Phase 2)
+POST   /api/v1/branches                          (implemented)
+GET    /api/v1/branches/:branchId                (implemented)
+PATCH  /api/v1/branches/:branchId                (implemented; no DELETE, deactivate with isActive)
 
 # Members, invitations, roles
 GET    /api/v1/members
@@ -436,7 +472,7 @@ PATCH  /api/v1/admin/users/:userId/status
 
 ### 7.8 Swagger
 
-- Every controller has `@ApiTags`; every DTO property documented (`@ApiProperty`) with examples; error responses documented using the shared error schema.
+- Swagger UI is served at `/api/docs` (JSON at `/api/docs-json`) when `SWAGGER_ENABLED` is true. Every controller has `@ApiTags`; every DTO property documented (`@ApiProperty`) with examples; error responses documented using the shared error schema.
 - The generated OpenAPI JSON (`/api/docs-json`) is **the contract** the frontend consumes; it is exported to the repo on CI so contract changes are visible in review.
 
 ### 7.9 Backend support for older, non-technical end users
@@ -452,6 +488,8 @@ The backend cannot design UI, but it can make simple, forgiving workflows possib
 ---
 
 ## 8. Security Standards
+
+> **Already enforced by the Phase 1 foundation:** items 7 (global validation, 1 MB body limit), 10 (CORS exact-origin allow-list, no wildcard, required in production), 11 (validated env, `.env` gitignored, no secrets in images), 12 (no bodies/queries/auth headers in logs; Observe redaction; static error messages), 16 (global exception filter, catalog text only), 17 (Helmet, `trust proxy` setting, no `X-Powered-By`), 18 (lockfile, CI audit), plus least-privilege DB role verification at startup (§6.6). Phase 2 added: item 5 (three-layer tenant isolation, cross-tenant requests answer 404; the security-event log for cross-tenant attempts covers membership denials only so far), item 6 (deny-by-default `PermissionsGuard`), item 8 (Prisma only; raw SQL limited to one reviewed tagged `$queryRaw` in `membership-resolver.ts`), and item 13 in part (append-only `audit_logs` with the `REVOKE`, written in the same transaction; auth events and medical-record reads are not audited yet). Items 1–4, 9, 14–15 arrive with the phases that need them.
 
 > Data-privacy notes reference the Philippine Data Privacy Act of 2012 (RA 10173) and its IRR as design inputs. **This is not legal advice**; requirements must be confirmed with a qualified privacy/legal professional and the clinic's Data Protection Officer.
 
@@ -477,7 +515,7 @@ The backend cannot design UI, but it can make simple, forgiving workflows possib
 15. **Breach readiness** — security events (cross-tenant attempts, token reuse, brute force) surfaced as Observe alerts; documented incident response including the NPC notification timeline (understood to be 72 hours — confirm).
 16. **Secure error handling** — global exception filter maps known errors (Prisma `P2002` → 409, `P2025` → 404, validation → 400) to the standard shape; unknown errors → generic 500 with `requestId`; details only in server logs (PHI-free).
 17. **HTTP hardening** — `helmet`, `trust proxy` configured correctly for real client IPs, no `X-Powered-By`.
-18. **Dependency hygiene** — lockfile committed, `npm audit` in CI, no pre-release packages in production paths (relevant to Q1).
+18. **Dependency hygiene** — lockfile committed, `npm audit` in CI (informational for now; make blocking once the baseline is understood), no pre-release packages in production paths. Prisma is pinned exactly to `7.10.1` for this reason (ADR-0001).
 
 ---
 
@@ -485,47 +523,54 @@ The backend cannot design UI, but it can make simple, forgiving workflows possib
 
 ### 9.1 Directory layout
 
+Existing today (Phase 1) and planned (marked *later*):
+
 ```
 src/
-  main.ts                      # bootstrap: prefix, versioning, pipes, helmet, CORS, swagger
-  app.module.ts
-  config/                      # env schema validation + typed config namespaces
+  main.ts                      # create app -> applyAppSetup -> init -> applyPostInit -> listen
+  app.setup.ts                 # ALL global concerns (prefix, versioning, pipes, filter, helmet, CORS, Swagger); shared with e2e tests
+  app.module.ts                # Config, Observe, Prisma, Health, Tenancy, Audit, Tenants, Branches
+  config/                      # env validation (class-validator) + typed namespaces; the only place that reads process.env
   common/
-    decorators/                # @Public, @TenantNotRequired, @RequirePermissions, @PlatformAdmin, @CurrentContext
-    guards/                    # JwtAuthGuard, PermissionsGuard, PlatformAdminGuard
-    filters/                   # GlobalExceptionFilter
-    interceptors/              # (minimal: e.g., audit/timing only if needed)
-    middleware/                # request id
-    dto/                       # PaginationQueryDto, shared response wrappers
-    errors/                    # error code catalog + DomainError classes
-    utils/
-  prisma/                      # PrismaService (raw, restricted), TenantPrismaService (scoped extension)
-  context/                     # RequestContext (AsyncLocalStorage)
+    errors/                    # error code catalog, DomainError, exception -> API error mapping, validation mapping
+    filters/                   # AllExceptionsFilter
+    http/                      # request id + access log middleware
+    dto/                       # ApiResponse / PaginatedResponse envelopes, pagination query DTO
+    decorators/                # @Public, @TenantNotRequired, @RequirePermissions; later: @PlatformAdmin, @CurrentContext
+    guards/                    # AuthGuard, PermissionsGuard; later: PlatformAdminGuard
+    auth/                      # Authenticator seam (AUTHENTICATOR token, DenyAllAuthenticator); Phase 3 adds the JWT authenticator
+    validation/                # IANA timezone validator, trim transform
+    utils/                     # later
+  observability/               # Observe wiring and redaction settings
+  prisma/                      # PrismaService (pg adapter, least-privilege check), TenantPrismaService + tenant-owned-models registry, PrismaModule (global)
+  generated/prisma/            # generated client (gitignored)
+  context/                     # RequestContext (AsyncLocalStorage) + its middleware (mounted by TenancyModule)
   modules/
-    health/
-    audit/
-    auth/                      # login, tokens, sessions, password flows
-    users/                     # global profile, platform account admin
-    tenants/                   # tenant lifecycle, onboarding
-    tenancy/                   # TenantGuard, membership resolution
-    branches/
-    members/                   # memberships + invitations
-    access-control/            # roles, permissions, policies
-    patients/
-    practitioners/
-    appointments/
-    clinical/                  # encounters, notes, diagnoses, prescriptions
-    services-catalog/
-    billing/                   # invoices, payments
-    notifications/
-    reports/
-    admin/                     # platform admin endpoints
+    health/                    # liveness + readiness (exists)
+    audit/                     # AuditService (same-transaction, append-only audit_logs)
+    auth/                      # later: login, tokens, sessions, password flows
+    users/                     # later: global profile, platform account admin
+    tenants/                   # TenantOnboardingService, TenantLifecycleService, tenant profile endpoints
+    tenancy/                   # TenantGuard, MembershipResolver, TenancyModule (context middleware + global guards)
+    branches/                  # branch endpoints (tenant client only)
+    members/                   # later: memberships + invitations
+    access-control/            # catalog.ts (permissions + role templates); later: roles, policies
+    patients/ practitioners/ appointments/ clinical/ services-catalog/ billing/ notifications/ reports/ admin/   # later
 prisma/
-  schema/                      # multi-file schema by domain
-  migrations/
-  seed/
-test/                          # e2e + isolation suites, factories, test DB helpers
-docs/
+  schema/                      # multi-file schema: base, identity, tenancy, audit; one file per later domain
+  migrations/                  # 20261118000000_tenancy_foundation (Phase 2) and later
+  seed/                        # later
+scripts/
+  db/                          # bootstrap.sql (roles, databases, grants), bootstrap.mjs, grants.sql, reset-test-db.mjs
+  docker/                      # postgres-init.sh (runs bootstrap.sql on the first start of the Compose database)
+test/
+  setup/                       # global setup (migrates the *_test DB), env loading, app factory, log capture
+  architecture/                # forbidden-patterns, prisma-access (who may inject PrismaService; no test code in src), tenant-registry (composite-FK convention)
+  *.e2e-spec.ts                # health, errors, security, conventions, database, swagger, request id/logging; tenancy-schema, tenancy-guards, tenant-prisma, audit, tenant-onboarding, tenant-isolation, route-registry
+  support/                     # test-only controllers, TestAuthenticator, tenancy fixtures (Clinic A, Clinic B, user M), db helpers
+docs/                          # architecture, api-conventions, authorization, database, docker, environment, error-codes, multitenancy, security-privacy, adr/
+plans/                         # child plans (00 and 01 implemented; 02-05 pending, not yet written)
+Dockerfile  docker-compose.yml  .dockerignore  .github/workflows/ci.yml
 ```
 
 ### 9.2 Conventions
@@ -537,16 +582,16 @@ docs/
 | Services | Business logic, transactions, policies, audit calls. Use the tenant-scoped client in domain modules. |
 | Repositories | Only where queries become complex or raw SQL is needed; otherwise services use Prisma directly (boring > clever). |
 | DTOs | `CreateXDto`, `UpdateXDto`, `XQueryDto`, `XResponseDto`; `class-validator` + `@ApiProperty`; response DTOs built by explicit mapper functions. |
-| Guards | Global, in the order in §5.2. |
+| Guards | Global `APP_GUARD`s registered by `TenancyModule`, in the order in §5.2. |
 | Decorators | Metadata only; no logic. |
-| Interceptors | Kept minimal; no hidden response rewriting beyond the `{ data }` envelope if adopted globally. |
-| Middleware | Request id, security headers. Not used for auth or tenancy. |
+| Interceptors | Kept minimal; no global response wrapping (ADR-0005): controllers return `{ data }` / `{ data, meta }` explicitly. |
+| Middleware | Request id, access log, security headers, and the `RequestContext` AsyncLocalStorage store (mounted by `TenancyModule` after the body parsers). Not used for authentication or tenant decisions; guards do that. |
 | Exception filters | One global filter producing the standard error shape. Domain code throws `DomainError(code, status)`. |
-| Prisma integration | Single `PrismaService` (lifecycle hooks, pg driver adapter); tenant-scoped extension exposed as `TenantPrismaService`. Prisma errors never escape to the client unmapped. |
-| Configuration | `@nestjs/config`, namespaced (`app`, `db`, `auth`, `cors`, `mail`), validated at boot; no `process.env` outside `config/`. |
-| Logging | Nest `Logger` (JSON in production), correlated by Observe; request id on every log line; PHI-free. |
+| Prisma integration | Single `PrismaService` (lifecycle hooks, `@prisma/adapter-pg`, query logging off; **exists**); tenant-scoped extension exposed as `TenantPrismaService` (**exists**; wraps the extended client, delegates and `$transaction` only). Prisma errors never escape to the client unmapped. |
+| Configuration | `@nestjs/config`, namespaced, validated at boot; no `process` access outside `src/config` and tests (oxlint rule). Existing namespaces: `app`, `database`, `cors`, `logging`, `swagger`, `observe`; later phases add `auth`, `mail`, … Adding a variable means: declare and validate it in `env.validation.ts`, document it in `docs/environment.md` and `.env.example`, and pass it to the container through Compose/host environment. |
+| Logging | Nest `ConsoleLogger` configured in `app.setup.ts` (`LOG_FORMAT` pretty/json, `LOG_LEVEL`), correlated by Observe; request id on every access-log line; PHI-free (path without query string). |
 | ESM | `.js` suffix on relative imports; `import.meta.dirname`; Vitest `vi.fn()`. |
-| Tests | `*.spec.ts` next to the code; `*.e2e-spec.ts` under `test/`. |
+| Tests | `*.spec.ts` next to the code (plus `test/architecture/**`); `*.e2e-spec.ts` under `test/`, run against a real PostgreSQL database whose name must end in `_test`. |
 
 ---
 
@@ -557,19 +602,23 @@ Order adjustments vs. the requested outline (with reasons):
 - **Phase 2 includes a minimal `users` table** because memberships reference users; full auth flows remain in Phase 3. Phase 2 tests use a test-only token helper.
 - **Services catalog moves to Phase 5** because appointments and encounters reference services.
 
-### Phase 1 — Project Foundation
+### Phase 1 — Project Foundation — **COMPLETE** (`plans/00-project-foundation.md`)
 - **Objectives:** A runnable, configured, conventional skeleton connected to PostgreSQL.
-- **Deliverables:** Prisma version decision applied (Q1) with matched CLI/client; PostgreSQL for local dev (Docker Compose) and a separate test DB; `PrismaService`; `@nestjs/config` with validated env; global prefix `/api` + URI versioning; global `ValidationPipe`; global exception filter + error code catalog; request id middleware; helmet + CORS from config; Swagger at `/api/docs`; health endpoints; Observe PHI-redaction configured; DB roles (owner vs app); lint rules (no `process.env` outside config, no `$queryRawUnsafe`); CI running lint, typecheck, unit, e2e against Postgres; remove the default "Hello World" controller.
-- **Dependencies:** Q1, Q4.
-- **Key decisions:** Prisma version; Express kept; error/response shape; multi-file Prisma schema.
-- **Done when:** `npm run start:dev` boots against Postgres; invalid env fails fast; `/api/health/ready` checks DB; Swagger renders; CI is green; a deliberate error returns the standard error shape without internals.
+- **Delivered:** Prisma pinned to 7.10.1 with `prisma.config.ts`, multi-file schema folder and generated client (Q1 resolved, ADR-0001); `PrismaService` with fail-fast connect and least-privilege role check; validated `@nestjs/config`; global prefix `/api` + URI versioning; global `ValidationPipe`; single exception filter + error code catalog; sanitized request ids + access log; Helmet + CORS from config; Swagger at `/api/docs`; liveness/readiness health endpoints; Observe PHI redaction; owner vs runtime DB roles and idempotent bootstrap; oxlint rules and architecture tests; separate `*_test` database for e2e; GitHub Actions CI (lint, format, typecheck, unit, migrate, e2e, build, audit, Docker build); default Hello World controller removed; project docs and ADRs 0001–0007.
+- **Pulled forward from Phase 7:** the multi-stage Dockerfile (`runtime`, `migrate`) and the local Docker Compose stack (§2.1), because the local database runs in Docker.
+- **Not delivered / still open:** hosting and region (Q4); rate limiting and authentication (Phase 3). The first Prisma migration arrived with Phase 2.
+- **Key decisions:** Prisma 7.10.1 pinned; Express kept; error envelope and explicit success envelopes; multi-file Prisma schema; oxlint kept (no ESLint); one image configured by environment variables.
+- **Done when (met):** `npm run start:dev` or `docker compose up --build -d` boots against Postgres; invalid env fails fast; `/api/health/ready` checks the DB; Swagger renders; CI defines the full pipeline; a deliberate error returns the standard shape without internals.
 
-### Phase 2 — Multi-Tenancy Foundation (`plans/01-multitenancy.md`)
+### Phase 2 — Multi-Tenancy Foundation — **COMPLETE** (`plans/01-multitenancy.md`)
 - **Objectives:** Tenancy data model and automatic, enforced tenant isolation.
-- **Deliverables:** `users` (minimal), `tenants`, `branches`, `tenant_memberships`, `invitations` schema; composite-FK pattern and conventions; `RequestContext` (AsyncLocalStorage); `TenantGuard`; tenant-scoped Prisma extension + tenant-owned model registry; route-category decorators; tenant onboarding transaction (platform-admin provisioned); tenant status lifecycle; branch CRUD; `audit_logs` table + `AuditService`; isolation test harness with two seeded tenants.
+- **Delivered:** `users` (minimal), `tenants`, `branches`, `tenant_memberships`, `permissions`, `roles`, `role_permissions`, `membership_roles`, `audit_logs` (first migration, with the append-only `REVOKE`); composite-FK convention enforced by a registry test; `RequestContext` (AsyncLocalStorage); pluggable authenticator seam with a fail-closed `DenyAllAuthenticator`; global `AuthGuard` -> `TenantGuard` -> `PermissionsGuard` (deny by default); `@Public()`, `@TenantNotRequired()`, `@RequirePermissions()`; `TenantPrismaService` (Prisma client extension) + tenant-owned model registry; `AuditService` (same transaction); tenant onboarding transaction and tenant status lifecycle (services); `GET/PATCH /api/v1/tenant` and branch endpoints (no delete); isolation test harness (Clinic A, Clinic B, user M); route-registry and Prisma-access architecture tests; docs and ADRs 0008-0010.
+- **Moved into Phase 2 from Phase 4 (approved, plans/01 D1):** the RBAC data model, permission catalog, role templates and `PermissionsGuard`. **Deferred to Phase 3 (D2):** the `invitations` table.
+- **As-built deviations:** recorded in `plans/01-multitenancy.md` §17 (context middleware mounted by `TenancyModule`; membership lookup is one raw SQL statement; lifecycle methods take no `reason`; `AuditLog` exposed append-only on the tenant client; join tables carry a non-PK `id`; only `slug` is unique on tenants; `pending` users are denied by `TenantGuard`; cross-tenant 404s are not logged as security events yet).
 - **Dependencies:** Phase 1.
-- **Key decisions:** tenant-in-session model; RLS deferred with role separation in place; composite FKs mandatory.
-- **Done when:** A query on a tenant-owned model without context throws; cross-tenant reads/writes on branches return 404 in tests; composite FKs reject cross-tenant references at the DB level (tested with raw inserts); onboarding creates tenant + branch + roles + owner atomically and is audited.
+- **Key decisions:** tenant-in-session model; global identity with tenant-scoped authorization (one account per human, roles on the membership); RLS deferred with role separation in place; composite FKs mandatory; `users.email` required (patient-portal access will need an email); the patient portal is modelled as `patient_portal_links` plus a separate principal type, not as memberships.
+- **Done when (met):** A query on a tenant-owned model without context throws; cross-tenant reads/writes on branches return 404 in tests; composite FKs reject cross-tenant references at the DB level (tested with raw inserts); onboarding creates tenant + branch + roles + owner atomically and is audited.
+- **Still open for Phase 3:** every protected route answers `401` until the JWT authenticator replaces `DenyAllAuthenticator`; users created by onboarding are `pending` until Phase 3 sets credentials. **Verification gaps:** `docker compose run --rm migrate`, the GitHub Actions run and `npm run db:test:reset` were not executed when Phase 2 was completed.
 
 ### Phase 3 — Authentication (`plans/02-authentication.md`)
 - **Objectives:** Secure global identity and sessions.
@@ -580,7 +629,7 @@ Order adjustments vs. the requested outline (with reasons):
 
 ### Phase 4 — User Management & Authorization (`plans/03-user-management-and-authorization.md`)
 - **Objectives:** RBAC and member administration within tenants.
-- **Deliverables:** Permission catalog + seeding; role templates materialized per tenant; `role_permissions`, `membership_roles`; `PermissionsGuard` (deny-by-default) + `@RequirePermissions`; resource-policy pattern; member listing, role assignment, suspension/removal with last-owner invariant; invitations management; global profile management; platform admin endpoints (tenants, user status); route-registry test.
+- **Deliverables:** Permission catalog growth (the catalog, role templates, `role_permissions`, `membership_roles`, `PermissionsGuard` and the route-registry test already exist from Phase 2); resource-policy pattern; member listing, role assignment, suspension/removal with last-owner invariant; invitations management; global profile management; platform admin endpoints (tenants, user status; `POST /admin/tenants` calls the Phase 2 onboarding service) and `@PlatformAdmin()`; the full role x endpoint matrix.
 - **Dependencies:** Phase 3.
 - **Key decisions:** roles tenant-owned, permissions code-defined; custom role editing deferred; platform admins have no implicit clinical data access.
 - **Done when:** Each default role's permission matrix is tested; every tenant-scoped route declares permissions (enforced by test); permission/role changes apply on the next request; removing a member immediately blocks their access.
@@ -601,7 +650,7 @@ Order adjustments vs. the requested outline (with reasons):
 
 ### Phase 7 — Testing Hardening & Production Readiness
 - **Objectives:** Confidence to handle real patient data.
-- **Deliverables:** Coverage gaps closed; full tenant-isolation and authorization matrices; security tests (§11.7); RLS spike on clinical tables with measured overhead and a go/no-go recommendation; load tests on hot endpoints (login, patient search, appointment listing); Dockerfile; production config review; migration pipeline (`migrate deploy`); backups + point-in-time recovery verified by a restore drill; Observe alerts (error rate, latency, security events); runbooks; privacy documentation support (data inventory, retention schedule).
+- **Deliverables:** Coverage gaps closed; full tenant-isolation and authorization matrices; security tests (§11.7); RLS spike on clinical tables with measured overhead and a go/no-go recommendation; load tests on hot endpoints (login, patient search, appointment listing); production deployment review of the existing Docker image and configuration (image size and base-image patching, TLS to the managed database including the provider CA bundle, secret injection, `TRUST_PROXY`, `CORS_ALLOWED_ORIGINS`, Observe keys) — the Dockerfile and `migrate` target already exist; production migration pipeline (`migrate deploy` via the `migrate` image); backups + point-in-time recovery verified by a restore drill; Observe alerts (error rate, latency, security events); runbooks; privacy documentation support (data inventory, retention schedule).
 - **Dependencies:** Phases 1–6; Q4.
 - **Done when:** All suites green in CI; restore drill succeeds; no critical/high vulnerabilities open; p95 latency targets met (to be set in the child plan); security checklist signed off.
 
@@ -616,11 +665,11 @@ Order adjustments vs. the requested outline (with reasons):
 | Layer | Tooling | What |
 |---|---|---|
 | Unit | Vitest, `vi.fn()` | Pure logic: policies, token utilities, mappers, validators, state machines. No DB. |
-| Integration | Vitest + real PostgreSQL test DB | Services + Prisma against a migrated schema: constraints, composite FKs, exclusion constraints, transactions, the tenant extension. **No mocking of Prisma for data-access behavior.** |
+| Integration | Vitest + real PostgreSQL test DB (`vitest.config.e2e.ts`) | Services + Prisma against a migrated schema: constraints, composite FKs, exclusion constraints, transactions, the tenant extension. **No mocking of Prisma for data-access behavior.** |
 | E2E API | Vitest + supertest + `Test.createTestingModule` | Full HTTP stack: guards, validation, error shapes, status codes. |
 
 ### 11.2 Database testing
-- Dedicated test database; migrations applied once per run; tables truncated between test files (or per-test transactions where feasible).
+- Dedicated test database `doc_tayo_test` (created by `scripts/db/bootstrap.sql`); the e2e global setup refuses any database whose name does not end in `_test`, then applies migrations once per run as the owner role (`npm run db:test:reset` resets it; re-run the bootstrap script afterwards). E2E files run one at a time (`fileParallelism: false`) because they share the database. `.env.test` (gitignored; template `.env.test.example`) holds its URLs; CI supplies real environment variables. The e2e suites cover health, error shape, security headers/CORS, API conventions, request id and log hygiene, database connectivity and Swagger (Phase 1), and tenancy schema constraints, guards, the tenant Prisma client, audit, onboarding, isolation and the route registry (Phase 2). Each tenancy file builds its own Clinic A/B fixtures (`test/support/tenancy-fixtures.ts`) and empties the tenancy tables with `resetTenancyData` (`test/support/db.ts`, `TRUNCATE`, leaving the migration-managed `permissions` rows).
 - Factories create tenants, users, memberships, and domain records with explicit tenants.
 - Constraint tests insert invalid rows directly to prove the database itself rejects them.
 
@@ -654,9 +703,9 @@ For every tenant-scoped resource, an automatically generated suite verifies, as 
 Plus a **static registry test**: every tenant-owned Prisma model is registered with the tenant extension, has `tenant_id`, `@@unique([tenantId, id])`, and composite FKs for tenant-owned relations.
 
 ### 11.6 Architecture guard tests
-- Every route is exactly one of: public, tenant-not-required, tenant-scoped (with permissions), platform-admin.
-- Domain modules do not inject the raw `PrismaService`.
-- No `$queryRawUnsafe` usage.
+- **Exists (Phase 1):** `test/architecture/forbidden-patterns.spec.ts` (no `$queryRawUnsafe`/`$executeRawUnsafe`, no `process` outside config/tests, no `console`).
+- **Exists (Phase 2):** `test/architecture/prisma-access.spec.ts` (modules outside the allow-list do not use the raw `PrismaService`; nothing under `src/` imports test code or `TestAuthenticator`), `test/architecture/tenant-registry.spec.ts` (every `tenantId` model is registered, has `@@unique([tenantId, id])` and composite FKs), `test/route-registry.e2e-spec.ts` (every route is public, tenant-not-required, or tenant-scoped with permissions). `prisma-access.spec.ts` and the route-registry test carry self-tests proving their checks can fail.
+- **Later:** platform-admin routes join the route-registry categories in Phase 4.
 
 ### 11.7 Security testing
 Injection payloads in search/filter params, oversized payloads, mass-assignment attempts (extra fields like `role`, `tenantId`, `status`), CORS behavior, rate-limit behavior, error responses free of stack traces/SQL, logs free of PHI (assert on captured logs for clinical routes), dependency audit.
@@ -672,19 +721,20 @@ Kept in `docs/`, short and maintained alongside code (a PR changing behavior upd
 
 | Document | Contents |
 |---|---|
-| `docs/architecture.md` | Module map, request lifecycle (guards order), key decisions. |
-| `docs/adr/NNNN-*.md` | Architecture Decision Records (one page each): Prisma version, tenant-in-session, RLS deferral, token strategy, etc. |
-| `docs/multitenancy.md` | Tenant model, context propagation, isolation layers, how to add a tenant-owned model safely (checklist). |
+| `docs/architecture.md` | Module map, request lifecycle (guards order), key decisions. **Exists** (Phase 1 content). |
+| `docs/adr/NNNN-*.md` | Architecture Decision Records (one page each). **Exist:** 0001 Prisma version, 0002 TypeScript strictness (amended in Phase 2), 0003 database roles, 0004 request ids and Observe, 0005 error envelope, 0006 lint and guards, 0007 Docker, 0008 tenant context, 0009 composite foreign keys, 0010 RLS deferred. **Later:** token strategy, etc. |
+| `docs/multitenancy.md` | Tenant model, context propagation, isolation layers, how to add a tenant-owned model safely (checklist). **Exists** (Phase 2). |
 | `docs/authentication.md` | Token/session lifecycle with sequence diagrams (Mermaid): login, refresh rotation, reuse detection, switch tenant, password reset. |
-| `docs/authorization.md` | Permission catalog, default role matrix, policy pattern. |
-| `docs/database.md` | Conventions (§6), ERD (Mermaid, generated from Prisma schema), global vs tenant-owned tables, retention per table. |
-| `docs/api-conventions.md` | §7 in reference form. |
-| `docs/error-codes.md` | Stable error code catalog. |
+| `docs/authorization.md` | Permission catalog, default role matrix, policy pattern. **Exists** (Phase 2 catalog; policy pattern arrives with Phase 4/5). |
+| `docs/database.md` | Roles, Prisma layout, migrations and test database (**exists**); later also conventions (§6), ERD (Mermaid, generated from Prisma schema), global vs tenant-owned tables, retention per table. |
+| `docs/api-conventions.md` | §7 in reference form. **Exists** (Phase 1 content). |
+| `docs/error-codes.md` | Stable error code catalog. **Exists.** |
 | OpenAPI | Generated by `@nestjs/swagger`; exported `openapi.json` committed by CI. The API contract for the frontend. |
-| `docs/environment.md` | Required env vars, local setup (Docker Compose Postgres), seeding, running tests. |
+| `docs/environment.md` | Required env vars, local setup, seeding, running tests. **Exists.** |
+| `docs/docker.md` | Docker and Compose guide: local architecture, networking, volumes, health checks, migrations, reset, production use of the same image. **Exists.** |
 | `docs/deployment.md` | Build, migrate, release, rollback, backups/restore, secrets, monitoring/alerts. |
-| `docs/security-privacy.md` | Data classification, logging rules, audit coverage, retention, incident response (not legal advice). |
-| `README.md` | Replace the default Nest README with project-specific quick start and links. |
+| `docs/security-privacy.md` | Data classification, logging rules, audit coverage, retention, incident response (not legal advice). **Exists** (logging/redaction rules only so far). |
+| `README.md` | Project-specific quick start and links. **Replaced** in Phase 1. |
 
 ---
 
@@ -701,7 +751,7 @@ Kept in `docs/`, short and maintained alongside code (a PR changing behavior upd
 | Membership-level access across all branches | Branch-restricted memberships |
 | Offset/cursor pagination, trigram search | Full-text search engine (only if Postgres proves insufficient) |
 | Audit logs | Tamper-evident (hash-chained) audit logs |
-| In-process jobs with outbox | Redis/BullMQ queues (only when volume requires) |
+| In-process jobs with outbox | Redis (shared rate-limit store, caching) and BullMQ queues, only when volume requires; the Docker/config structure already allows adding them without redesign (§2.1) |
 | Basic reports | Analytics, PhilHealth claims integration, lab/HL7/FHIR integrations |
 
 ---
@@ -710,7 +760,9 @@ Kept in `docs/`, short and maintained alongside code (a PR changing behavior upd
 
 | Risk | Impact | Mitigation |
 |---|---|---|
-| Prisma 8 RC + Prisma 7 client mismatch | Build/runtime breakage; unstable APIs under PHI workloads | Resolve in Phase 1 (Q1); pin exact versions. |
+| Accidental upgrade to the Prisma 8 RC (npm `latest` for the CLI) | Build/runtime breakage; unstable APIs under PHI workloads | **Mitigated:** exact pins at `7.10.1` (ADR-0001); never run `npm i prisma@latest`. |
+| Local `docker compose down -v` or a changed DB password applied to an existing volume | Local data loss / confusing auth failures | Documented in `docs/docker.md`; the volume is local-only throwaway data. Production data is never in Compose. |
+| Production TLS to a managed database with a private CA (for example RDS) fails under `verify-full` | API cannot connect | Supply the CA bundle via `NODE_EXTRA_CA_CERTS`; verify in the Phase 7 deployment review. |
 | Missed tenant filter in app code | Cross-tenant data leak (severe) | Scoped Prisma extension, composite FKs, registry + isolation tests, raw SQL review. |
 | Prisma extension coverage gaps (nested writes, raw queries) | Partial bypass | Composite FKs as hard backstop; documented coverage; tests per operation type. |
 | Per-request session/membership lookup | Extra DB query per request | Single indexed query; short in-request caching; measure in Phase 7. |
@@ -725,10 +777,10 @@ Kept in `docs/`, short and maintained alongside code (a PR changing behavior upd
 
 ## 15. Open Questions Requiring Approval
 
-1. **Prisma version.** Recommended: pin **stable Prisma 7.x** for both `prisma` and `@prisma/client` (plus `@prisma/adapter-pg`), rewriting `prisma.config.ts` to the v7 shape, and revisit Prisma 8 after GA. Alternative: adopt Prisma 8 RC fully (new `contract.prisma`/`orm` config, `@prisma/orm-postgres`). I could not verify the Prisma 8 ORM APIs because its ORM skill isn't installed here.
-2. **RLS timing.** Recommended: defer to a Phase 7 spike (with DB role separation from Phase 1). Approve, or require RLS on clinical tables from Phase 5?
+1. ~~**Prisma version.**~~ **Resolved (Phase 1, ADR-0001):** Prisma 7.10.1 pinned for CLI, client and `@prisma/adapter-pg`; revisit Prisma 8 once it is GA with matching packages.
+2. **RLS timing.** Recommended: defer to a Phase 7 spike (with DB role separation from Phase 1). Recorded as deferred in ADR-0010 and built that way in Phase 2; still needs explicit approval: approve, or require RLS on clinical tables from Phase 5?
 3. **Onboarding and registration.** Recommended: platform-admin-provisioned tenants and invitation-only staff accounts at launch; public self-registration disabled. Approve?
-4. **Hosting and data location.** Which provider / region for the API and managed PostgreSQL? (Affects backups, PITR, secrets, and cross-border data transfer considerations.)
+4. **Hosting and data location.** *Partly answered:* the working assumption is a container host such as AWS EC2 with a managed PostgreSQL such as AWS RDS, but nothing is provisioned or committed. Still needed before Phase 7: confirm provider, region, backups/PITR, secret management, and cross-border data transfer considerations. The image and configuration already work with any externally supplied `DATABASE_URL`.
 5. **Refresh token transport.** Will the frontend be served from the same site (e.g., `app.doctayo.ph` + `api.doctayo.ph`) so httpOnly cookies work? If not, refresh tokens must be returned in the body and stored by the client.
 6. **Email and SMS providers.** Which transactional email provider? Is SMS required at launch (likely valuable for older patients' reminders)?
 7. **Retention periods.** What retention periods apply to medical, financial, and audit records? (Needs clinic/legal input.)

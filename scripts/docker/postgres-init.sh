@@ -1,5 +1,5 @@
 #!/bin/sh
-# Runs once when the optional compose Postgres starts with an empty volume.
+# Runs once when the compose Postgres container starts with an empty volume.
 set -eu
 psql -v ON_ERROR_STOP=1 \
   -v owner_password="$DB_OWNER_PASSWORD" \

@@ -29,7 +29,7 @@
     "db:test:reset": "node scripts/db/reset-test-db.mjs",
     "db:bootstrap": "node scripts/db/bootstrap.mjs",
     "docker:build": "docker build -t doc-tayo-api .",
-    "docker:up": "docker compose up --build api",
+    "docker:up": "docker compose up --build -d",
     "docker:migrate": "docker compose run --rm migrate",
     "docker:down": "docker compose down"
   },

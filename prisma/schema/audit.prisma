@@ -1,0 +1,26 @@
+// Append-only: the runtime role has INSERT/SELECT only (see the migration).
+// `tenantId` is nullable for platform/identity events, so this model is
+// tenant-attributed but NOT in the tenant-owned registry (audit writes go
+// through AuditService with the unscoped client).
+
+model AuditLog {
+  id                String   @id @default(uuid(7)) @db.Uuid
+  tenantId          String?  @map("tenant_id") @db.Uuid
+  actorUserId       String?  @map("actor_user_id") @db.Uuid
+  actorMembershipId String?  @map("actor_membership_id") @db.Uuid
+  action            String
+  entityType        String   @map("entity_type")
+  entityId          String?  @map("entity_id") @db.Uuid
+  changedFields     String[] @default([]) @map("changed_fields")
+  requestId         String?  @map("request_id") @db.Uuid
+  ip                String?  @db.Inet
+  occurredAt        DateTime @default(now()) @map("occurred_at") @db.Timestamptz(6)
+
+  tenant          Tenant?           @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  actorUser       User?             @relation(fields: [actorUserId], references: [id], onDelete: Restrict)
+  actorMembership TenantMembership? @relation(fields: [tenantId, actorMembershipId], references: [tenantId, id], onDelete: Restrict)
+
+  @@index([tenantId, occurredAt])
+  @@index([entityType, entityId])
+  @@map("audit_logs")
+}

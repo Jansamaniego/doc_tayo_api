@@ -1,0 +1,43 @@
+// Global (not tenant-owned) identity data. One row per human, one email.
+
+enum UserStatus {
+  pending
+  active
+  deactivated
+
+  @@map("user_status")
+}
+
+enum PlatformRole {
+  none
+  platform_admin
+
+  @@map("platform_role")
+}
+
+model User {
+  id           String       @id @default(uuid(7)) @db.Uuid
+  email        String       @unique
+  fullName     String       @map("full_name")
+  status       UserStatus   @default(pending)
+  platformRole PlatformRole @default(none) @map("platform_role")
+  createdAt    DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  memberships TenantMembership[]
+  auditLogs   AuditLog[]
+
+  @@map("users")
+}
+
+model Permission {
+  id          String   @id @default(uuid(7)) @db.Uuid
+  key         String   @unique
+  description String
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  rolePermissions RolePermission[]
+
+  @@map("permissions")
+}

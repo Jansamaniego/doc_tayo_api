@@ -1,14 +1,14 @@
 # Plan 00 — Project Foundation (Master Plan Phase 1)
 
 > **Parent:** [`../plan.md`](../plan.md) (source of truth). This plan implements **Phase 1 — Project Foundation** only.
-> **Status:** Draft for review. **No implementation starts until approved.**
-> **Scope guard:** infrastructure and skeleton only. No tenant, auth, user, role, branch, or clinic code (see §14).
+> **Status:** **Implemented** (M1–M11 complete; outcome and deviations in §19). Sections below were written before execution; where they differ from the code, §19 and the later phases' plans say what was built.
+> **Scope guard (Phase 1 only):** infrastructure and skeleton only. No tenant, auth, user, role, branch, or clinic code (see §14). Tenancy was added in Phase 2 (`plans/01-multitenancy.md`).
 
 Items marked **`REQUIRES APPROVAL`** are not assumed approved. They are collected in §17.
 
 ---
 
-## 1. Baseline: What Exists Today (verified)
+## 1. Baseline: What Existed at the Start of Phase 1 (verified)
 
 | Area | Finding | Consequence |
 |---|---|---|
@@ -225,7 +225,7 @@ src/
   generated/prisma/          # gitignored
 prisma/
   schema/base.prisma
-  migrations/                # empty until Phase 2
+  migrations/                # empty in Phase 1; the first migration (tenancy_foundation) arrived with Phase 2
 scripts/db/
   bootstrap.sql  init/       # role + database + grant scripts
 test/
@@ -361,7 +361,7 @@ A small, closed map from class-validator constraint keys to stable field-level c
 
 ### 9.4 Initial catalog (documented in `docs/error-codes.md`)
 Active in Phase 1: `VALIDATION_FAILED`, `MALFORMED_JSON`, `PAYLOAD_TOO_LARGE`, `UNSUPPORTED_MEDIA_TYPE`, `ROUTE_NOT_FOUND`, `NOT_FOUND`, `CONFLICT_UNIQUE`, `CONFLICT_REFERENCE`, `NOT_READY`, `SERVICE_UNAVAILABLE`, `INTERNAL_ERROR`.
-Reserved (cataloged so the shape is stable; no producer until noted): `UNAUTHENTICATED`, `FORBIDDEN` (Phase 3/4), `RATE_LIMITED` (Phase 3), `CONFLICT` (generic). Field-level codes: `REQUIRED`, `INVALID_FORMAT`, `INVALID_TYPE`, `INVALID_VALUE`, `OUT_OF_RANGE`, `TOO_SHORT`, `TOO_LONG`, `UNKNOWN_FIELD`.
+Reserved (cataloged so the shape is stable; no producer until noted): `UNAUTHENTICATED`, `FORBIDDEN` (**active since Phase 2**), `RATE_LIMITED` (Phase 3), `CONFLICT` (generic). Phase 2 also added `TENANT_NOT_SELECTED`, `TENANT_SUSPENDED`, `TENANT_DEACTIVATED`, `TENANT_ACCESS_DENIED`. Field-level codes: `REQUIRED`, `INVALID_FORMAT`, `INVALID_TYPE`, `INVALID_VALUE`, `OUT_OF_RANGE`, `TOO_SHORT`, `TOO_LONG`, `UNKNOWN_FIELD`.
 Rule: codes are append-only; renaming a code is a breaking API change.
 
 ---
@@ -383,7 +383,7 @@ Verified experimentally on oxlint `1.93`:
 - Prettier unchanged. `npm run format:check` added for CI parity (`prettier --check`).
 
 ### 10.3 TypeScript and conventions
-- Keep `strict: true`; add nothing risky. Consider `noImplicitOverride` and `noUncheckedIndexedAccess` — **not** enabled now (churn vs. benefit; revisit in Phase 2 when domain code starts). Documented in ADR-0002 as an explicit non-decision.
+- Keep `strict: true`; add nothing risky. Consider `noImplicitOverride` and `noUncheckedIndexedAccess` — **not** enabled in Phase 1 (churn vs. benefit). Documented in ADR-0002 as an explicit non-decision. **Update (Phase 2, plans/01 D6): both flags are now enabled and ADR-0002 is amended.**
 - ESM: relative imports end in `.js`; no `__dirname`; `import type` for type-only imports where `isolatedModules` requires.
 - Naming: files `kebab-case.<role>.ts` (`prisma.service.ts`, `create-patient.dto.ts`); classes `PascalCase`; DB `snake_case` via `@map` (Phase 2+); env vars `SCREAMING_SNAKE`; error codes `SCREAMING_SNAKE`.
 - Tests: unit `*.spec.ts` beside code; e2e/integration `*.e2e-spec.ts` in `test/`.
@@ -402,7 +402,7 @@ Verified experimentally on oxlint `1.93`:
 
 Decision: write a ~15-line `DatabaseHealthIndicator` (using `HealthIndicatorService`) around tagged `` this.prisma.$queryRaw`SELECT 1` `` rather than Terminus's bundled `PrismaHealthIndicator`. The bundled one calls `$queryRawUnsafe` internally; our own forbidden-pattern test (and policy) bans that call in our codebase, and a custom indicator also lets us guarantee **no error text** (which could contain host/credentials) reaches the response — the indicator reports only `up`/`down`.
 Responses never include connection strings, hostnames, driver messages, or versions.
-`@Public()` tagging for health happens in Phase 3 when the global JWT guard is introduced (noted in `docs/architecture.md`).
+`@Public()` tagging for health happened in Phase 2, when the global guard chain was introduced (`plans/01-multitenancy.md`).
 
 ---
 
@@ -608,7 +608,7 @@ Run the master plan's completion criteria (§16) end to end and record evidence 
 
 ## 19. Implementation Status and Deviations (recorded after execution)
 
-All milestones M1–M11 were executed; every §12 test exists and passes (69 unit/architecture + 42 e2e). Approval items were resolved with the recommended defaults (A1 Prisma 7.10.1, A2 role split, A3 Prisma 8 skill folders deleted, B2–B7 as proposed).
+All milestones M1–M11 were executed; every §12 test exists and passes (69 unit/architecture + 42 e2e at Phase 1 completion; after Phase 2 the suites are 121 unit/architecture + 183 e2e). Approval items were resolved with the recommended defaults (A1 Prisma 7.10.1, A2 role split, A3 Prisma 8 skill folders deleted, B2–B7 as proposed).
 
 Deviations from the plan as written:
 

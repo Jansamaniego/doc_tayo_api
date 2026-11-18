@@ -8,6 +8,7 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
+import { Public } from '../../src/common/decorators/public.decorator.js';
 import { DomainError } from '../../src/common/errors/domain-error.js';
 import { Prisma } from '../../src/generated/prisma/client.js';
 
@@ -22,6 +23,7 @@ export class ItemDto {
 }
 
 /** Test-only controller; registered by createTestApp, never by src/. */
+@Public()
 @Controller({ path: '_test', version: '1' })
 export class TestController {
   @Post('items')
