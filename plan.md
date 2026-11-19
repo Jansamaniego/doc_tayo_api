@@ -7,7 +7,7 @@
 > **Sync rule:** this plan and the child plans describe the code **as it is**. Whenever implemented code differs from a plan, the plan is edited in the same change (see `CLAUDE.md`, "Plans and docs stay aligned with the code").
 >
 > **Child plans** (must stay consistent with this document):
-> `plans/00-project-foundation.md` (Phase 1, implemented) · `plans/01-multitenancy.md` (Phase 2, implemented) · `plans/02-authentication.md` · `plans/03-user-management-and-authorization.md` · `plans/04-core-clinic-apis.md` · `plans/05-additional-clinic-apis.md`
+> `plans/00-project-foundation.md` (Phase 1, implemented) · `plans/01-multitenancy.md` (Phase 2, implemented) · `plans/02-authentication.md` (Phase 3, draft awaiting approval) · `plans/03-user-management-and-authorization.md` · `plans/04-core-clinic-apis.md` · `plans/05-additional-clinic-apis.md`
 
 ---
 
@@ -569,7 +569,7 @@ test/
   *.e2e-spec.ts                # health, errors, security, conventions, database, swagger, request id/logging; tenancy-schema, tenancy-guards, tenant-prisma, audit, tenant-onboarding, tenant-isolation, route-registry
   support/                     # test-only controllers, TestAuthenticator, tenancy fixtures (Clinic A, Clinic B, user M), db helpers
 docs/                          # architecture, api-conventions, authorization, database, docker, environment, error-codes, multitenancy, security-privacy, adr/
-plans/                         # child plans (00 and 01 implemented; 02-05 pending, not yet written)
+plans/                         # child plans (00 and 01 implemented; 02 drafted, awaiting approval; 03-05 not yet written)
 Dockerfile  docker-compose.yml  .dockerignore  .github/workflows/ci.yml
 ```
 
@@ -620,7 +620,7 @@ Order adjustments vs. the requested outline (with reasons):
 - **Done when (met):** A query on a tenant-owned model without context throws; cross-tenant reads/writes on branches return 404 in tests; composite FKs reject cross-tenant references at the DB level (tested with raw inserts); onboarding creates tenant + branch + roles + owner atomically and is audited.
 - **Still open for Phase 3:** every protected route answers `401` until the JWT authenticator replaces `DenyAllAuthenticator`; users created by onboarding are `pending` until Phase 3 sets credentials. **Verification gaps:** `docker compose run --rm migrate`, the GitHub Actions run and `npm run db:test:reset` were not executed when Phase 2 was completed.
 
-### Phase 3 — Authentication (`plans/02-authentication.md`)
+### Phase 3 — Authentication (`plans/02-authentication.md`) — **child plan drafted, decisions D1–D11 pending approval; not implemented**
 - **Objectives:** Secure global identity and sessions.
 - **Deliverables:** Argon2id hashing; login; access JWT; sessions with refresh rotation + reuse detection; logout / logout-all; switch-tenant; `GET /me`; email verification; forgot/reset password; change password; session listing/revocation; invitation acceptance (new + existing users); login throttling and lockout; mail sending via outbox; scheduled cleanup of expired tokens/sessions; auth events audited.
 - **Dependencies:** Phase 2; Q3, Q5, Q6.
