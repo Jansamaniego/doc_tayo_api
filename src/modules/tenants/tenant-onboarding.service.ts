@@ -11,10 +11,7 @@ import { Prisma } from '../../generated/prisma/client.js';
 import { PrismaService } from '../../prisma/prisma.service.js';
 import { ROLE_TEMPLATES } from '../access-control/catalog.js';
 import { AuditService } from '../audit/audit.service.js';
-import {
-  ACCOUNT_SETUP_TTL_MS,
-  UserTokenService,
-} from '../auth/flows/user-token.service.js';
+import { UserTokenService } from '../auth/flows/user-token.service.js';
 import { MailQueue } from '../mail/mail-queue.service.js';
 
 export interface OnboardTenantInput {
@@ -189,12 +186,10 @@ export class TenantOnboardingService {
         // Same transaction as the clinic: the email exists only if the clinic does.
         const clinicName = input.name.trim();
         if (user.status === 'pending') {
-          const token = await this.tokens.issue(
-            tx,
-            user.id,
-            'account_setup',
-            ACCOUNT_SETUP_TTL_MS,
-          );
+          const token = await this.tokens.issue(tx, {
+            userId: user.id,
+            type: 'account_setup',
+          });
           await this.mail.enqueue(tx, 'account_setup', {
             to: user.email,
             token,

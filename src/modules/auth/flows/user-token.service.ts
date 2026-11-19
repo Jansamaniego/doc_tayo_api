@@ -1,16 +1,22 @@
 import { Injectable } from '@nestjs/common';
+import { DomainError } from '../../../common/errors/domain-error.js';
 import { Clock } from '../../../common/security/clock.js';
 import { generateToken, hashToken } from '../../../common/security/token.js';
 import type {
   PrismaClient,
+  UserStatus,
   UserTokenType,
 } from '../../../generated/prisma/client.js';
 import { PrismaService } from '../../../prisma/prisma.service.js';
+import { assertPasswordPolicy } from '../password/password-policy.js';
 
 export type UserTokenDb = Pick<PrismaClient, 'userToken'>;
 
-export const PASSWORD_RESET_TTL_MS = 30 * 60 * 1000;
-export const ACCOUNT_SETUP_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+/** How long each kind of emailed link stays valid. */
+const TTL_MS: Record<UserTokenType, number> = {
+  password_reset: 30 * 60 * 1000,
+  account_setup: 7 * 24 * 60 * 60 * 1000,
+};
 
 /**
  * Emailed single-use tokens (password reset, account setup). Only a SHA-256
@@ -27,9 +33,7 @@ export class UserTokenService {
   /** Returns the raw token to email. It is never stored or logged. */
   async issue(
     db: UserTokenDb,
-    userId: string,
-    type: UserTokenType,
-    ttlMs: number,
+    { userId, type }: { userId: string; type: UserTokenType },
   ): Promise<string> {
     const now = this.clock.now();
     await db.userToken.updateMany({
@@ -42,14 +46,48 @@ export class UserTokenService {
         userId,
         type,
         tokenHash: hashToken(token),
-        expiresAt: new Date(now.getTime() + ttlMs),
+        expiresAt: new Date(now.getTime() + TTL_MS[type]),
       },
     });
     return token;
   }
 
+  /**
+   * Redeems a token for a user who must be in `userStatus`: finds it, checks
+   * the new password policy, then consumes it. The policy runs BEFORE the
+   * token is consumed, so a weak password does not burn the link. Throws
+   * TOKEN_INVALID for an unknown, used, expired or wrong-status token.
+   */
+  async redeem(
+    db: UserTokenDb,
+    {
+      token,
+      type,
+      userStatus,
+      newPassword,
+    }: {
+      token: string;
+      type: UserTokenType;
+      userStatus: UserStatus;
+      newPassword: string;
+    },
+  ) {
+    const found = await this.find(db, { token, type });
+    if (!found || found.user.status !== userStatus) {
+      throw new DomainError('TOKEN_INVALID');
+    }
+    assertPasswordPolicy(newPassword, found.user.email);
+    if (!(await this.consume(db, found.id))) {
+      throw new DomainError('TOKEN_INVALID');
+    }
+    return found.user;
+  }
+
   /** An unused, unexpired token of this type, with its user; otherwise null. */
-  find(db: UserTokenDb, token: string, type: UserTokenType) {
+  private find(
+    db: UserTokenDb,
+    { token, type }: { token: string; type: UserTokenType },
+  ) {
     return db.userToken.findFirst({
       where: {
         tokenHash: hashToken(token),
@@ -73,7 +111,7 @@ export class UserTokenService {
   }
 
   /** Atomically marks the token used. False when someone else just used it. */
-  async consume(db: UserTokenDb, tokenId: string): Promise<boolean> {
+  private async consume(db: UserTokenDb, tokenId: string): Promise<boolean> {
     const { count } = await db.userToken.updateMany({
       where: { id: tokenId, usedAt: null },
       data: { usedAt: this.clock.now() },

@@ -72,3 +72,8 @@ export class PrismaService
     }
   }
 }
+
+/** The transaction client handed to `PrismaService.$transaction` callbacks. */
+export type PrismaTransaction = Parameters<
+  Parameters<PrismaService['$transaction']>[0]
+>[0];

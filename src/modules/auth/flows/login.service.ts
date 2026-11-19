@@ -10,10 +10,7 @@ import {
 } from '../../tenancy/user-memberships.service.js';
 import { AccessTokenService } from '../session/access-token.service.js';
 import { PasswordHasher } from '../password/password-hasher.js';
-import {
-  SessionService,
-  type SessionMeta,
-} from '../session/session.service.js';
+import { SessionService } from '../session/session.service.js';
 
 /** Consecutive failed logins before the account locks (plans/02 §9.2). */
 const LOCKOUT_THRESHOLD = 10;
@@ -47,11 +44,17 @@ export class LoginService {
     private readonly memberships: UserMembershipsService,
   ) {}
 
-  async login(
-    rawEmail: string,
-    password: string,
-    meta: SessionMeta,
-  ): Promise<LoginResult> {
+  async login({
+    email: rawEmail,
+    password,
+    userAgent,
+    ip,
+  }: {
+    email: string;
+    password: string;
+    userAgent?: string | null;
+    ip?: string | null;
+  }): Promise<LoginResult> {
     const email = normalizeEmail(rawEmail);
     const user = await this.prisma.user.findUnique({
       where: { email },
@@ -104,26 +107,23 @@ export class LoginService {
           ...(rehash ? { passwordHash: rehash } : {}),
         },
       });
-      const created = await this.sessions.create(
-        usable.id,
-        { ...meta, activeTenantId },
-        tx,
-      );
-      await this.audit.record(tx, {
+      const created = await this.sessions.create(tx, {
+        userId: usable.id,
+        activeTenantId,
+        userAgent,
+        ip,
+      });
+      await this.audit.recordAccountEvent(tx, {
         action: 'auth.login',
-        entityType: 'user',
-        entityId: usable.id,
-        tenantId: null,
-        actorUserId: usable.id,
-        actorMembershipId: null,
+        userId: usable.id,
       });
       return created;
     });
 
-    const { token, expiresIn } = await this.accessTokens.sign(
-      usable.id,
-      session.sessionId,
-    );
+    const { token, expiresIn } = await this.accessTokens.sign({
+      userId: usable.id,
+      sessionId: session.sessionId,
+    });
     return {
       accessToken: token,
       expiresIn,
@@ -153,13 +153,9 @@ export class LoginService {
           data: { lockedUntil: new Date(now.getTime() + LOCKOUT_DURATION_MS) },
         });
       }
-      await this.audit.record(tx, {
+      await this.audit.recordAccountEvent(tx, {
         action: 'auth.login_failed',
-        entityType: 'user',
-        entityId: userId,
-        tenantId: null,
-        actorUserId: userId,
-        actorMembershipId: null,
+        userId,
       });
     });
   }

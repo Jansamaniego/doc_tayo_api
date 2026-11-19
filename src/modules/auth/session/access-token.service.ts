@@ -34,10 +34,10 @@ export class AccessTokenService {
     private readonly config: ConfigType<typeof authConfig>,
   ) {}
 
-  async sign(
-    userId: string,
-    sessionId: string,
-  ): Promise<{ token: string; expiresIn: number }> {
+  async sign({
+    userId,
+    sessionId,
+  }: VerifiedAccessToken): Promise<{ token: string; expiresIn: number }> {
     const expiresIn = this.config.jwt.accessTtlSeconds;
     const token = await this.jwt.signAsync(
       {

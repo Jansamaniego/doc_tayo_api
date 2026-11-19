@@ -549,7 +549,7 @@ Implemented on 2026-11-19. Verified with: `npx tsc --noEmit`, `oxlint --type-awa
 | 10 | `TenantPrismaService.$transaction` unchanged | The callback now receives a `TenantTransaction`: the scoped delegates plus an opaque `transaction` handle used only to join the outbox. `TenantModels` gains the `invitation` delegate. | `members` may only use the tenant client but must queue the invitation email in the same transaction. The handle does not expose the Prisma client. |
 | 11 | `TenantGuard` unchanged except rejecting non-staff principals | The access rule moved to `tenancy/tenant-access.ts` (`tenantAccessError`) and is used by `TenantGuard` and switch-tenant. No runtime non-staff check was added because `Principal.type` can only be `staff`. | One rule in one place, so switch-tenant and the guard cannot drift. The check is added with the first non-staff principal. |
 | 12 | `UserMembershipsService` not planned | Added in `modules/tenancy` (unscoped, global identity data) for the login response and `GET /me/memberships` | Shared by `auth` and `users`. |
-| 13 | `POST /auth/refresh` accepts request metadata | `RefreshService.rotate(token, meta)` keeps the parameter but ignores it; user agent and IP are recorded at login only | Not required by the plan; the parameter is kept for a later "last seen device" feature. |
+| 13 | `POST /auth/refresh` accepts request metadata | `RefreshService.rotate(token)` takes the token only; user agent and IP are recorded at login only | Not required by the plan. (An earlier build kept an unused `meta` parameter; it was removed in the code-organisation pass below.) |
 | 14 | Refresh-token body mode as a switchable alternative | Not built; `AUTH_REFRESH_COOKIE` does not exist | D2 chose the cookie. Moving to the body later changes `AuthController` and `AuthCookieService` only. |
 | 15 | `ThrottlerGuard` on health | Health is `@SkipThrottle({ default: true })` | Probes must never be rate limited. |
 
@@ -562,6 +562,12 @@ Added once the first frontend integration was planned; none of it changes the de
 - `npm run db:seed:dev` (`src/dev/seed.ts`): a clinic with an owner and a receptionist, a second branch and a documented password; idempotent; refuses `NODE_ENV=production`. It ships in `dist/` like all of `src/` and is not reachable from any route.
 - CORS: `Retry-After` is now in `exposedHeaders` (without it, browser code cannot read the header that `429` responses rely on). Credentialed preflight and responses are covered by `test/cors-credentials.e2e-spec.ts`.
 - `docs/frontend-integration.md`.
+
+### Follow-up: code organisation (no behaviour change)
+
+- `modules/auth/` is grouped into `session/`, `password/` and `flows/` (see the tree in §12); `lockout.ts` and `password-validation.ts` were merged into `login.service.ts` and `password/password-policy.ts`; `auth-throttle.ts` is now `throttle.ts`.
+- Object arguments: `SessionService.create/revoke/revokeAllForUser` take `(db, { ... })` with the transaction handle first and **required**; `AccessTokenService.sign`, `SessionService.findActive`, `LoginService.login`, `PasswordChangeService.change`, `PasswordRecoveryService.reset`, `AccountSetupService.setup`, `InvitationAcceptanceService.accept` and `UserTokenService.issue` take one object. `SwitchTenantService.switch({ tenantId })` reads the user and session from `RequestContext`.
+- `UserTokenService` derives the TTL from the token type and gains `redeem()` (find, policy, consume), which `reset` and `setup` share; `find`/`consume` are private. `AuditService.recordAccountEvent()` replaces nine repeated user-as-actor audit blocks. `PrismaTransaction` (in `prisma.service.ts`) names the transaction client type.
 
 ### Test files
 

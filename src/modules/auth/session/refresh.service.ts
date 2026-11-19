@@ -8,7 +8,6 @@ import type { UserStatus } from '../../../generated/prisma/client.js';
 import { PrismaService } from '../../../prisma/prisma.service.js';
 import { AuditService } from '../../audit/audit.service.js';
 import { AccessTokenService } from './access-token.service.js';
-import type { SessionMeta } from './session.service.js';
 
 export interface RotatedSession {
   accessToken: string;
@@ -60,14 +59,8 @@ export class RefreshService {
     private readonly config: ConfigType<typeof authConfig>,
   ) {}
 
-  /**
-   * `_meta` is accepted but not used: the session's user agent and IP are
-   * recorded at login only (plans/02-authentication.md §19, deviation 13).
-   */
-  async rotate(
-    presentedToken: string,
-    _meta: SessionMeta = {},
-  ): Promise<RotatedSession> {
+  /** The session's user agent and IP are recorded at login only (plans/02 §19, deviation 13). */
+  async rotate(presentedToken: string): Promise<RotatedSession> {
     if (!presentedToken) throw new DomainError('UNAUTHENTICATED');
     const tokenHash = hashToken(presentedToken);
     const now = this.clock.now();
@@ -94,13 +87,11 @@ export class RefreshService {
               where: { id: row.session_id, revokedAt: null },
               data: { revokedAt: now, revokedReason: 'refresh_reuse' },
             });
-            await this.audit.record(tx, {
+            await this.audit.recordAccountEvent(tx, {
               action: 'auth.refresh_reuse_detected',
+              userId: row.user_id,
               entityType: 'session',
               entityId: row.session_id,
-              tenantId: null,
-              actorUserId: row.user_id,
-              actorMembershipId: null,
             });
           }
           return { kind: 'reuse' };
@@ -159,10 +150,7 @@ export class RefreshService {
     }
     if (outcome.kind === 'invalid') throw new DomainError('UNAUTHENTICATED');
 
-    const { token, expiresIn } = await this.accessTokens.sign(
-      outcome.session.userId,
-      outcome.session.sessionId,
-    );
+    const { token, expiresIn } = await this.accessTokens.sign(outcome.session);
     return { ...outcome.session, accessToken: token, expiresIn };
   }
 }

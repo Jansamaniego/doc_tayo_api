@@ -1,10 +1,8 @@
 import { Injectable } from '@nestjs/common';
-import { DomainError } from '../../../common/errors/domain-error.js';
 import { Clock } from '../../../common/security/clock.js';
 import { PrismaService } from '../../../prisma/prisma.service.js';
 import { AuditService } from '../../audit/audit.service.js';
 import { PasswordHasher } from '../password/password-hasher.js';
-import { assertPasswordPolicy } from '../password/password-policy.js';
 import { UserTokenService } from './user-token.service.js';
 
 /**
@@ -21,24 +19,26 @@ export class AccountSetupService {
     private readonly audit: AuditService,
   ) {}
 
-  async setup(
-    token: string,
-    newPassword: string,
-    fullName?: string,
-  ): Promise<void> {
+  async setup({
+    token,
+    newPassword,
+    fullName,
+  }: {
+    token: string;
+    newPassword: string;
+    fullName?: string;
+  }): Promise<void> {
     await this.prisma.$transaction(async (tx) => {
-      const found = await this.tokens.find(tx, token, 'account_setup');
-      if (!found || found.user.status !== 'pending') {
-        throw new DomainError('TOKEN_INVALID');
-      }
-      assertPasswordPolicy(newPassword, found.user.email);
-      if (!(await this.tokens.consume(tx, found.id))) {
-        throw new DomainError('TOKEN_INVALID');
-      }
+      const user = await this.tokens.redeem(tx, {
+        token,
+        type: 'account_setup',
+        userStatus: 'pending',
+        newPassword,
+      });
 
       const now = this.clock.now();
       await tx.user.update({
-        where: { id: found.user.id },
+        where: { id: user.id },
         data: {
           status: 'active',
           passwordHash: await this.hasher.hash(newPassword),
@@ -49,13 +49,9 @@ export class AccountSetupService {
           ...(fullName ? { fullName } : {}),
         },
       });
-      await this.audit.record(tx, {
+      await this.audit.recordAccountEvent(tx, {
         action: 'auth.account_setup',
-        entityType: 'user',
-        entityId: found.user.id,
-        tenantId: null,
-        actorUserId: found.user.id,
-        actorMembershipId: null,
+        userId: user.id,
       });
     });
   }

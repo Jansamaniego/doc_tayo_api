@@ -71,7 +71,9 @@ export class AuthController {
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
-    const result = await this.login.login(dto.email, dto.password, {
+    const result = await this.login.login({
+      email: dto.email,
+      password: dto.password,
       userAgent: req.headers['user-agent'],
       ip: req.ip,
     });
@@ -103,10 +105,7 @@ export class AuthController {
     this.cookies.assertAllowedOrigin(req);
     const token = this.cookies.read(req);
     if (!token) throw new DomainError('UNAUTHENTICATED');
-    const rotated = await this.refresh.rotate(token, {
-      userAgent: req.headers['user-agent'],
-      ip: req.ip,
-    });
+    const rotated = await this.refresh.rotate(token);
     this.cookies.set(res, rotated.refreshToken, rotated.absoluteExpiresAt);
     return {
       data: { accessToken: rotated.accessToken, expiresIn: rotated.expiresIn },
@@ -125,14 +124,12 @@ export class AuthController {
     const userId = this.context.requireUser();
     const sessionId = this.context.sessionId!;
     await this.prisma.$transaction(async (tx) => {
-      await this.sessions.revoke(sessionId, 'logout', tx);
-      await this.audit.record(tx, {
+      await this.sessions.revoke(tx, { sessionId, reason: 'logout' });
+      await this.audit.recordAccountEvent(tx, {
         action: 'auth.logout',
+        userId,
         entityType: 'session',
         entityId: sessionId,
-        tenantId: null,
-        actorUserId: userId,
-        actorMembershipId: null,
       });
     });
     this.cookies.clear(res);
@@ -151,14 +148,13 @@ export class AuthController {
     this.cookies.assertAllowedOrigin(req);
     const userId = this.context.requireUser();
     await this.prisma.$transaction(async (tx) => {
-      await this.sessions.revokeAllForUser(userId, 'logout_all', {}, tx);
-      await this.audit.record(tx, {
+      await this.sessions.revokeAllForUser(tx, {
+        userId,
+        reason: 'logout_all',
+      });
+      await this.audit.recordAccountEvent(tx, {
         action: 'auth.logout_all',
-        entityType: 'user',
-        entityId: userId,
-        tenantId: null,
-        actorUserId: userId,
-        actorMembershipId: null,
+        userId,
       });
     });
     this.cookies.clear(res);
@@ -173,11 +169,7 @@ export class AuthController {
       'The new active clinic and the permissions held there. Applies from the next request.',
   })
   async switchActiveTenant(@Body() dto: SwitchTenantDto) {
-    const userId = this.context.requireUser();
-    const sessionId = this.context.sessionId!;
-    return {
-      data: await this.switchTenant.switch(userId, sessionId, dto.tenantId),
-    };
+    return { data: await this.switchTenant.switch(dto) };
   }
 
   @Public()
@@ -203,7 +195,7 @@ export class AuthController {
   })
   @ApiBadRequestResponse({ description: 'TOKEN_INVALID or VALIDATION_FAILED' })
   async resetPassword(@Body() dto: ResetPasswordDto): Promise<void> {
-    await this.recovery.reset(dto.token, dto.newPassword);
+    await this.recovery.reset(dto);
   }
 
   @Public()
@@ -213,6 +205,6 @@ export class AuthController {
   @ApiNoContentResponse({ description: 'Account activated; sign in next.' })
   @ApiBadRequestResponse({ description: 'TOKEN_INVALID or VALIDATION_FAILED' })
   async setUpAccount(@Body() dto: AccountSetupDto): Promise<void> {
-    await this.accountSetup.setup(dto.token, dto.newPassword, dto.fullName);
+    await this.accountSetup.setup(dto);
   }
 }

@@ -24,7 +24,13 @@ export class PasswordChangeService {
   ) {}
 
   /** Keeps the CURRENT session, revokes every other one, queues the notice. */
-  async change(currentPassword: string, newPassword: string): Promise<void> {
+  async change({
+    currentPassword,
+    newPassword,
+  }: {
+    currentPassword: string;
+    newPassword: string;
+  }): Promise<void> {
     const userId = this.context.requireUser();
     const user = await this.prisma.user.findUniqueOrThrow({
       where: { id: userId },
@@ -52,20 +58,15 @@ export class PasswordChangeService {
         where: { id: userId },
         data: { passwordHash, passwordChangedAt: this.clock.now() },
       });
-      await this.sessions.revokeAllForUser(
+      await this.sessions.revokeAllForUser(tx, {
         userId,
-        'password_changed',
-        { exceptSessionId: this.context.sessionId },
-        tx,
-      );
+        reason: 'password_changed',
+        exceptSessionId: this.context.sessionId,
+      });
       await this.mail.enqueue(tx, 'password_changed', { to: user.email });
-      await this.audit.record(tx, {
+      await this.audit.recordAccountEvent(tx, {
         action: 'auth.password_changed',
-        entityType: 'user',
-        entityId: userId,
-        tenantId: null,
-        actorUserId: userId,
-        actorMembershipId: null,
+        userId,
       });
     });
     this.mail.notify();

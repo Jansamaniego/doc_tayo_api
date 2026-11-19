@@ -103,14 +103,12 @@ export class MeService {
         select: { id: true },
       });
       if (!own) throw new DomainError('NOT_FOUND');
-      await this.sessions.revoke(sessionId, 'logout', tx);
-      await this.audit.record(tx, {
+      await this.sessions.revoke(tx, { sessionId, reason: 'logout' });
+      await this.audit.recordAccountEvent(tx, {
         action: 'auth.session_revoked',
+        userId,
         entityType: 'session',
         entityId: sessionId,
-        tenantId: null,
-        actorUserId: userId,
-        actorMembershipId: null,
       });
     });
   }

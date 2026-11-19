@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { DomainError } from '../../../common/errors/domain-error.js';
+import { RequestContext } from '../../../context/request-context.js';
 import { PrismaService } from '../../../prisma/prisma.service.js';
 import { AuditService } from '../../audit/audit.service.js';
 import { MembershipResolver } from '../../tenancy/membership-resolver.js';
@@ -24,13 +25,17 @@ export class SwitchTenantService {
     private readonly prisma: PrismaService,
     private readonly resolver: MembershipResolver,
     private readonly audit: AuditService,
+    private readonly context: RequestContext,
   ) {}
 
-  async switch(
-    userId: string,
-    sessionId: string,
-    tenantId: string,
-  ): Promise<SwitchTenantResult> {
+  /** Switches the CALLER's current session (user and session come from the request context). */
+  async switch({
+    tenantId,
+  }: {
+    tenantId: string;
+  }): Promise<SwitchTenantResult> {
+    const userId = this.context.requireUser();
+    const sessionId = this.context.sessionId!;
     const membership = await this.resolver.resolve(tenantId, userId);
     const denial = tenantAccessError(membership);
     if (denial || !membership) {

@@ -12,7 +12,9 @@ import { PrismaService } from '../../../prisma/prisma.service.js';
 /** The session/refresh-token delegates; satisfied by PrismaService or a transaction. */
 export type SessionDb = Pick<PrismaClient, 'session' | 'refreshToken'>;
 
-export interface SessionMeta {
+export interface NewSession {
+  userId: string;
+  activeTenantId?: string | null;
   userAgent?: string | null;
   ip?: string | null;
 }
@@ -44,9 +46,8 @@ export class SessionService {
   ) {}
 
   async create(
-    userId: string,
-    options: SessionMeta & { activeTenantId?: string | null } = {},
-    db: SessionDb = this.prisma,
+    db: SessionDb,
+    { userId, activeTenantId, userAgent, ip }: NewSession,
   ): Promise<CreatedSession> {
     const now = this.clock.now();
     const { idleTtlSeconds, absoluteTtlSeconds } = this.config.session;
@@ -59,10 +60,10 @@ export class SessionService {
     const session = await db.session.create({
       data: {
         userId,
-        activeTenantId: options.activeTenantId ?? null,
+        activeTenantId: activeTenantId ?? null,
         principalType: 'staff',
-        userAgent: options.userAgent?.slice(0, USER_AGENT_MAX) ?? null,
-        ip: options.ip ?? null,
+        userAgent: userAgent?.slice(0, USER_AGENT_MAX) ?? null,
+        ip: ip ?? null,
         lastUsedAt: now,
         idleExpiresAt,
         absoluteExpiresAt,
@@ -84,10 +85,13 @@ export class SessionService {
    * (session joined to its user). Also slides the idle window, at most once a
    * minute, never past the absolute lifetime.
    */
-  async findActive(
-    sessionId: string,
-    userId: string,
-  ): Promise<ActiveSession | null> {
+  async findActive({
+    sessionId,
+    userId,
+  }: {
+    sessionId: string;
+    userId: string;
+  }): Promise<ActiveSession | null> {
     const now = this.clock.now();
     const session = await this.prisma.session.findFirst({
       where: {
@@ -129,9 +133,8 @@ export class SessionService {
 
   /** Revokes one session. False when it was already revoked (first reason is kept). */
   async revoke(
-    sessionId: string,
-    reason: SessionRevokedReason,
-    db: SessionDb = this.prisma,
+    db: SessionDb,
+    { sessionId, reason }: { sessionId: string; reason: SessionRevokedReason },
   ): Promise<boolean> {
     const { count } = await db.session.updateMany({
       where: { id: sessionId, revokedAt: null },
@@ -142,18 +145,22 @@ export class SessionService {
 
   /** Revokes every live session of a user, optionally sparing one. */
   async revokeAllForUser(
-    userId: string,
-    reason: SessionRevokedReason,
-    options: { exceptSessionId?: string } = {},
-    db: SessionDb = this.prisma,
+    db: SessionDb,
+    {
+      userId,
+      reason,
+      exceptSessionId,
+    }: {
+      userId: string;
+      reason: SessionRevokedReason;
+      exceptSessionId?: string;
+    },
   ): Promise<number> {
     const { count } = await db.session.updateMany({
       where: {
         userId,
         revokedAt: null,
-        ...(options.exceptSessionId
-          ? { id: { not: options.exceptSessionId } }
-          : {}),
+        ...(exceptSessionId ? { id: { not: exceptSessionId } } : {}),
       },
       data: { revokedAt: this.clock.now(), revokedReason: reason },
     });

@@ -268,7 +268,7 @@ describe('login, throttling and lockout (real PostgreSQL)', () => {
       const service = app.get(LoginService);
       const attempt = () =>
         service
-          .login(user.email, 'wrong password here', {})
+          .login({ email: user.email, password: 'wrong password here' })
           .catch((e: unknown) => e);
       for (let i = 0; i < 9; i++) {
         expect(await attempt()).toMatchObject({ code: 'INVALID_CREDENTIALS' });

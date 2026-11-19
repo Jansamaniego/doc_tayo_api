@@ -6,7 +6,10 @@ import {
 } from '../../../common/errors/error-codes.js';
 import { Clock } from '../../../common/security/clock.js';
 import { hashToken } from '../../../common/security/token.js';
-import { PrismaService } from '../../../prisma/prisma.service.js';
+import {
+  PrismaService,
+  type PrismaTransaction,
+} from '../../../prisma/prisma.service.js';
 import { AuditService } from '../../audit/audit.service.js';
 import { PasswordHasher } from '../password/password-hasher.js';
 import { assertPasswordPolicy } from '../password/password-policy.js';
@@ -26,10 +29,14 @@ export class InvitationAcceptanceService {
     private readonly audit: AuditService,
   ) {}
 
-  async accept(
-    token: string,
-    details: { fullName?: string; newPassword?: string },
-  ): Promise<void> {
+  async accept({
+    token,
+    ...details
+  }: {
+    token: string;
+    fullName?: string;
+    newPassword?: string;
+  }): Promise<void> {
     await this.prisma.$transaction(async (tx) => {
       const now = this.clock.now();
       const invitation = await tx.invitation.findUnique({
@@ -126,13 +133,12 @@ export class InvitationAcceptanceService {
         });
       }
 
-      const membershipId = await this.joinTenant(
-        tx,
-        invitation.tenantId,
+      const membershipId = await this.joinTenant(tx, {
+        tenantId: invitation.tenantId,
         userId,
-        invitation.roleId,
+        roleId: invitation.roleId,
         now,
-      );
+      });
       await tx.invitation.update({
         where: { id: invitation.id },
         data: { acceptedUserId: userId },
@@ -150,11 +156,13 @@ export class InvitationAcceptanceService {
 
   /** New membership, or re-activation of a removed one (unique per tenant + user). */
   private async joinTenant(
-    tx: Parameters<Parameters<PrismaService['$transaction']>[0]>[0],
-    tenantId: string,
-    userId: string,
-    roleId: string,
-    now: Date,
+    tx: PrismaTransaction,
+    {
+      tenantId,
+      userId,
+      roleId,
+      now,
+    }: { tenantId: string; userId: string; roleId: string; now: Date },
   ): Promise<string> {
     const existing = await tx.tenantMembership.findUnique({
       where: { tenantId_userId: { tenantId, userId } },

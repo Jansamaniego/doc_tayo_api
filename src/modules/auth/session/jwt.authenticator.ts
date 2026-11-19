@@ -30,10 +30,7 @@ export class JwtAuthenticator implements Authenticator {
     const verified = await this.tokens.verify(match[1]);
     if (!verified) return null;
 
-    const session = await this.sessions.findActive(
-      verified.sessionId,
-      verified.userId,
-    );
+    const session = await this.sessions.findActive(verified);
     if (!session) return null;
 
     return {

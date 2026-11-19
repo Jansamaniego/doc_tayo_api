@@ -55,7 +55,7 @@ export class MeController {
       'Password changed. Other sessions are revoked; this one stays signed in.',
   })
   async changePassword(@Body() dto: ChangePasswordDto): Promise<void> {
-    await this.passwordChange.change(dto.currentPassword, dto.newPassword);
+    await this.passwordChange.change(dto);
   }
 
   @Get('memberships')

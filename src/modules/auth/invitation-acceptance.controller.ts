@@ -29,9 +29,6 @@ export class InvitationAcceptanceController {
     description: 'TENANT_SUSPENDED or TENANT_DEACTIVATED',
   })
   async accept(@Body() dto: AcceptInvitationDto): Promise<void> {
-    await this.acceptance.accept(dto.token, {
-      fullName: dto.fullName,
-      newPassword: dto.newPassword,
-    });
+    await this.acceptance.accept(dto);
   }
 }

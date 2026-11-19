@@ -61,6 +61,35 @@ export function changedFieldNames(
 export class AuditService {
   constructor(private readonly context: RequestContext) {}
 
+  /**
+   * An event about the user's own account (sign-in, password, sessions): the
+   * user is the actor, and it belongs to no clinic. `entityType` defaults to
+   * `user` and `entityId` to the user; pass both for a `session` event.
+   */
+  recordAccountEvent(
+    db: AuditWriter,
+    {
+      action,
+      userId,
+      entityType = 'user',
+      entityId = userId,
+    }: {
+      action: string;
+      userId: string;
+      entityType?: string;
+      entityId?: string;
+    },
+  ): Promise<void> {
+    return this.record(db, {
+      action,
+      entityType,
+      entityId,
+      tenantId: null,
+      actorUserId: userId,
+      actorMembershipId: null,
+    });
+  }
+
   async record(db: AuditWriter, entry: AuditEntry): Promise<void> {
     const requestId = this.context.requestId;
     const ip = this.context.ip;

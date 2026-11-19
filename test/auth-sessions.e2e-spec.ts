@@ -6,6 +6,7 @@ import type { PrismaClient } from '../src/generated/prisma/client.js';
 import { AccessTokenService } from '../src/modules/auth/session/access-token.service.js';
 import { RefreshService } from '../src/modules/auth/session/refresh.service.js';
 import { SessionService } from '../src/modules/auth/session/session.service.js';
+import { PrismaService } from '../src/prisma/prisma.service.js';
 import { createTestApp } from './setup/create-test-app.js';
 import { createActiveUser, type TestUser } from './support/auth.js';
 import { createOwnerClient, resetTenancyData } from './support/db.js';
@@ -20,6 +21,7 @@ const b64url = (value: object | string) =>
 describe('access tokens, sessions and refresh (real PostgreSQL)', () => {
   let app: NestExpressApplication;
   let owner: PrismaClient;
+  let db: PrismaService;
   let clock: TestClock;
   let sessions: SessionService;
   let tokens: AccessTokenService;
@@ -31,6 +33,7 @@ describe('access tokens, sessions and refresh (real PostgreSQL)', () => {
     owner = createOwnerClient();
     clock = new TestClock();
     app = await createTestApp({ productionAuthenticator: true, clock });
+    db = app.get(PrismaService);
     sessions = app.get(SessionService);
     tokens = app.get(AccessTokenService);
     refresh = app.get(RefreshService);
@@ -50,8 +53,11 @@ describe('access tokens, sessions and refresh (real PostgreSQL)', () => {
     return token ? req.set('Authorization', `Bearer ${token}`) : req;
   };
   const newSession = async (userId = user.id) => {
-    const created = await sessions.create(userId, {});
-    const { token } = await tokens.sign(userId, created.sessionId);
+    const created = await sessions.create(db, { userId });
+    const { token } = await tokens.sign({
+      userId,
+      sessionId: created.sessionId,
+    });
     return { ...created, accessToken: token };
   };
   const row = (id: string) =>
@@ -180,7 +186,7 @@ describe('access tokens, sessions and refresh (real PostgreSQL)', () => {
     it('a revoked session stops working immediately', async () => {
       const { accessToken, sessionId } = await newSession();
       await get(accessToken).expect(200);
-      await sessions.revoke(sessionId, 'logout');
+      await sessions.revoke(db, { sessionId: sessionId, reason: 'logout' });
       const res = await get(accessToken).expect(401);
       expect(res.body.error.code).toBe('UNAUTHENTICATED');
       const stored = await row(sessionId);
@@ -209,14 +215,14 @@ describe('access tokens, sessions and refresh (real PostgreSQL)', () => {
     it('a token whose sub does not match the session owner is refused', async () => {
       const other = await createActiveUser(owner, 'other@example.com');
       const { sessionId } = await newSession(other.id);
-      const { token } = await tokens.sign(user.id, sessionId);
+      const { token } = await tokens.sign({ userId: user.id, sessionId });
       await get(token).expect(401);
     });
 
     it('idle expiry: a new token for a long-idle session is refused', async () => {
       const { sessionId } = await newSession();
       clock.advance(15 * DAY);
-      const { token } = await tokens.sign(user.id, sessionId);
+      const { token } = await tokens.sign({ userId: user.id, sessionId });
       await get(token).expect(401);
     });
 
@@ -224,10 +230,10 @@ describe('access tokens, sessions and refresh (real PostgreSQL)', () => {
       const { sessionId } = await newSession();
       for (let day = 0; day < 31; day++) {
         clock.advance(DAY);
-        const { token } = await tokens.sign(user.id, sessionId);
+        const { token } = await tokens.sign({ userId: user.id, sessionId });
         if (day < 29) await get(token).expect(200);
       }
-      const { token } = await tokens.sign(user.id, sessionId);
+      const { token } = await tokens.sign({ userId: user.id, sessionId });
       await get(token).expect(401);
     });
 
@@ -240,7 +246,7 @@ describe('access tokens, sessions and refresh (real PostgreSQL)', () => {
       expect(within.lastUsedAt.getTime()).toBe(first.lastUsedAt.getTime());
 
       clock.advance(2 * MINUTE);
-      const { token } = await tokens.sign(user.id, sessionId);
+      const { token } = await tokens.sign({ userId: user.id, sessionId });
       await get(token).expect(200);
       const after = await row(sessionId);
       expect(after.lastUsedAt.getTime()).toBeGreaterThan(
@@ -274,7 +280,8 @@ describe('access tokens, sessions and refresh (real PostgreSQL)', () => {
     });
 
     it('truncates the user agent to 256 characters and stores the IP', async () => {
-      const created = await sessions.create(user.id, {
+      const created = await sessions.create(db, {
+        userId: user.id,
         userAgent: 'x'.repeat(400),
         ip: '203.0.113.9',
       });
@@ -288,7 +295,9 @@ describe('access tokens, sessions and refresh (real PostgreSQL)', () => {
       const a = await newSession();
       const b = await newSession();
       const o = await newSession(other.id);
-      const count = await sessions.revokeAllForUser(user.id, 'logout_all', {
+      const count = await sessions.revokeAllForUser(db, {
+        userId: user.id,
+        reason: 'logout_all',
         exceptSessionId: b.sessionId,
       });
       expect(count).toBe(1);
@@ -302,8 +311,12 @@ describe('access tokens, sessions and refresh (real PostgreSQL)', () => {
 
     it('revoking twice keeps the first reason', async () => {
       const { sessionId } = await newSession();
-      expect(await sessions.revoke(sessionId, 'logout')).toBe(true);
-      expect(await sessions.revoke(sessionId, 'admin')).toBe(false);
+      expect(
+        await sessions.revoke(db, { sessionId: sessionId, reason: 'logout' }),
+      ).toBe(true);
+      expect(
+        await sessions.revoke(db, { sessionId: sessionId, reason: 'admin' }),
+      ).toBe(false);
       expect((await row(sessionId)).revokedReason).toBe('logout');
     });
   });
@@ -311,7 +324,7 @@ describe('access tokens, sessions and refresh (real PostgreSQL)', () => {
   describe('refresh rotation', () => {
     it('rotates: returns a new pair and the old refresh token no longer works', async () => {
       const first = await newSession();
-      const next = await refresh.rotate(first.refreshToken, {});
+      const next = await refresh.rotate(first.refreshToken);
       expect(next.refreshToken).not.toBe(first.refreshToken);
       expect(next.sessionId).toBe(first.sessionId);
       expect(next.userId).toBe(user.id);
@@ -328,17 +341,13 @@ describe('access tokens, sessions and refresh (real PostgreSQL)', () => {
 
     it('reuse of an old token revokes the whole session and audits it', async () => {
       const first = await newSession();
-      const second = await refresh.rotate(first.refreshToken, {});
-      await expect(
-        refresh.rotate(first.refreshToken, {}),
-      ).rejects.toMatchObject({
+      const second = await refresh.rotate(first.refreshToken);
+      await expect(refresh.rotate(first.refreshToken)).rejects.toMatchObject({
         code: 'UNAUTHENTICATED',
       });
       // The attacker's AND the legitimate client's tokens are dead.
       await get(second.accessToken).expect(401);
-      await expect(
-        refresh.rotate(second.refreshToken, {}),
-      ).rejects.toMatchObject({
+      await expect(refresh.rotate(second.refreshToken)).rejects.toMatchObject({
         code: 'UNAUTHENTICATED',
       });
       const stored = await row(first.sessionId);
@@ -359,8 +368,8 @@ describe('access tokens, sessions and refresh (real PostgreSQL)', () => {
     it('two concurrent refreshes with one token: one wins, the other is reuse (no grace window)', async () => {
       const first = await newSession();
       const results = await Promise.allSettled([
-        refresh.rotate(first.refreshToken, {}),
-        refresh.rotate(first.refreshToken, {}),
+        refresh.rotate(first.refreshToken),
+        refresh.rotate(first.refreshToken),
       ]);
       expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
       const rejected = results.find((r) => r.status === 'rejected');
@@ -374,17 +383,18 @@ describe('access tokens, sessions and refresh (real PostgreSQL)', () => {
       ['an unknown token', () => 'A'.repeat(43)],
       ['an empty token', () => ''],
     ])('rejects %s', async (_label, token) => {
-      await expect(refresh.rotate(token(), {})).rejects.toMatchObject({
+      await expect(refresh.rotate(token())).rejects.toMatchObject({
         code: 'UNAUTHENTICATED',
       });
     });
 
     it('rejects a revoked session, a deactivated user and an expired session', async () => {
       const revoked = await newSession();
-      await sessions.revoke(revoked.sessionId, 'logout');
-      await expect(
-        refresh.rotate(revoked.refreshToken, {}),
-      ).rejects.toMatchObject({
+      await sessions.revoke(db, {
+        sessionId: revoked.sessionId,
+        reason: 'logout',
+      });
+      await expect(refresh.rotate(revoked.refreshToken)).rejects.toMatchObject({
         code: 'UNAUTHENTICATED',
       });
 
@@ -394,7 +404,7 @@ describe('access tokens, sessions and refresh (real PostgreSQL)', () => {
         data: { status: 'deactivated' },
       });
       await expect(
-        refresh.rotate(deactivated.refreshToken, {}),
+        refresh.rotate(deactivated.refreshToken),
       ).rejects.toMatchObject({
         code: 'UNAUTHENTICATED',
       });
@@ -405,11 +415,9 @@ describe('access tokens, sessions and refresh (real PostgreSQL)', () => {
 
       const idle = await newSession();
       clock.advance(15 * DAY);
-      await expect(refresh.rotate(idle.refreshToken, {})).rejects.toMatchObject(
-        {
-          code: 'UNAUTHENTICATED',
-        },
-      );
+      await expect(refresh.rotate(idle.refreshToken)).rejects.toMatchObject({
+        code: 'UNAUTHENTICATED',
+      });
     });
 
     it('extends the idle window but never past the absolute lifetime', async () => {
@@ -417,7 +425,7 @@ describe('access tokens, sessions and refresh (real PostgreSQL)', () => {
       let token = first.refreshToken;
       for (let i = 0; i < 3; i++) {
         clock.advance(9 * DAY); // day 9, 18, 27
-        token = (await refresh.rotate(token, {})).refreshToken;
+        token = (await refresh.rotate(token)).refreshToken;
       }
       const stored = await row(first.sessionId);
       // Day 27 + 14 d idle would be day 41, but the session ends at day 30.
@@ -425,7 +433,7 @@ describe('access tokens, sessions and refresh (real PostgreSQL)', () => {
         stored.absoluteExpiresAt.getTime(),
       );
       clock.advance(4 * DAY); // day 31 > 30 day absolute
-      await expect(refresh.rotate(token, {})).rejects.toMatchObject({
+      await expect(refresh.rotate(token)).rejects.toMatchObject({
         code: 'UNAUTHENTICATED',
       });
     });
@@ -439,7 +447,7 @@ describe('access tokens, sessions and refresh (real PostgreSQL)', () => {
         where: { id: first.sessionId },
         data: { activeTenantId: tenant.id },
       });
-      const next = await refresh.rotate(first.refreshToken, {});
+      const next = await refresh.rotate(first.refreshToken);
       expect(next.activeTenantId).toBe(tenant.id);
     });
   });

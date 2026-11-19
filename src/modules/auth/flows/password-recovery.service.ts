@@ -1,17 +1,12 @@
 import { Injectable } from '@nestjs/common';
-import { DomainError } from '../../../common/errors/domain-error.js';
 import { Clock } from '../../../common/security/clock.js';
 import { normalizeEmail } from '../../../common/validation/email.js';
 import { PrismaService } from '../../../prisma/prisma.service.js';
 import { AuditService } from '../../audit/audit.service.js';
 import { MailQueue } from '../../mail/mail-queue.service.js';
 import { PasswordHasher } from '../password/password-hasher.js';
-import { assertPasswordPolicy } from '../password/password-policy.js';
 import { SessionService } from '../session/session.service.js';
-import {
-  PASSWORD_RESET_TTL_MS,
-  UserTokenService,
-} from './user-token.service.js';
+import { UserTokenService } from './user-token.service.js';
 
 /** Forgot / reset password (plans/02-authentication.md §7.1, §8). */
 @Injectable()
@@ -38,20 +33,14 @@ export class PasswordRecoveryService {
     if (!user || user.status !== 'active') return;
 
     await this.prisma.$transaction(async (tx) => {
-      const token = await this.tokens.issue(
-        tx,
-        user.id,
-        'password_reset',
-        PASSWORD_RESET_TTL_MS,
-      );
+      const token = await this.tokens.issue(tx, {
+        userId: user.id,
+        type: 'password_reset',
+      });
       await this.mail.enqueue(tx, 'password_reset', { to: user.email, token });
-      await this.audit.record(tx, {
+      await this.audit.recordAccountEvent(tx, {
         action: 'auth.password_reset_requested',
-        entityType: 'user',
-        entityId: user.id,
-        tenantId: null,
-        actorUserId: user.id,
-        actorMembershipId: null,
+        userId: user.id,
       });
     });
     this.mail.notify();
@@ -63,42 +52,40 @@ export class PasswordRecoveryService {
    * policy is checked before the token is consumed, so a weak password does
    * not burn the link.
    */
-  async reset(token: string, newPassword: string): Promise<void> {
+  async reset({
+    token,
+    newPassword,
+  }: {
+    token: string;
+    newPassword: string;
+  }): Promise<void> {
     await this.prisma.$transaction(async (tx) => {
-      const found = await this.tokens.find(tx, token, 'password_reset');
-      if (!found || found.user.status !== 'active') {
-        throw new DomainError('TOKEN_INVALID');
-      }
-      assertPasswordPolicy(newPassword, found.user.email);
-      if (!(await this.tokens.consume(tx, found.id))) {
-        throw new DomainError('TOKEN_INVALID');
-      }
+      const user = await this.tokens.redeem(tx, {
+        token,
+        type: 'password_reset',
+        userStatus: 'active',
+        newPassword,
+      });
 
       const now = this.clock.now();
       await tx.user.update({
-        where: { id: found.user.id },
+        where: { id: user.id },
         data: {
           passwordHash: await this.hasher.hash(newPassword),
           passwordChangedAt: now,
-          emailVerifiedAt: found.user.emailVerifiedAt ?? now,
+          emailVerifiedAt: user.emailVerifiedAt ?? now,
           failedLoginCount: 0,
           lockedUntil: null,
         },
       });
-      await this.sessions.revokeAllForUser(
-        found.user.id,
-        'password_reset',
-        {},
-        tx,
-      );
-      await this.mail.enqueue(tx, 'password_changed', { to: found.user.email });
-      await this.audit.record(tx, {
+      await this.sessions.revokeAllForUser(tx, {
+        userId: user.id,
+        reason: 'password_reset',
+      });
+      await this.mail.enqueue(tx, 'password_changed', { to: user.email });
+      await this.audit.recordAccountEvent(tx, {
         action: 'auth.password_reset',
-        entityType: 'user',
-        entityId: found.user.id,
-        tenantId: null,
-        actorUserId: found.user.id,
-        actorMembershipId: null,
+        userId: user.id,
       });
     });
     this.mail.notify();

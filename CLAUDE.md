@@ -81,3 +81,32 @@ Planning tasks do not require implementation tests to be written prematurely. Ho
 - **Verify before writing.** State only what was checked in the code or in a command's output. Mark anything unverified as such (principle 4).
 - **Before reporting a task done:** re-read the plan/doc sections touching the change, and in the final report list which plan and doc files were updated (or state that none needed changing).
 - **Planning work in the other direction:** an approved plan may describe code that does not exist yet; mark such parts with their phase or "planned" so they cannot be mistaken for the current state.
+
+## Code Organisation and Style Conventions
+
+These apply to every change, so new code follows them without being asked. When existing code disagrees with a rule you are touching, bring that code in line (smallest change) rather than copying the old style.
+
+### Folder and file layout
+
+- A module's root holds only its `*.module.ts`, controllers and `dto/`. Once a module has more than about eight source files, group the rest in subfolders **by concern** (for example `auth/session/`, `auth/password/`, `auth/flows/`), not by file kind. Never create a folder for one file.
+- File names say what is inside: `x.service.ts` (injectable service), `x.controller.ts`, `x.guard.ts`, `x.module.ts`, `x.dto.ts`; anything else is plain code (a pure function or constants file) named for its subject, without a `.service` suffix.
+- Do not keep a file of a few lines. Constants or a thin wrapper used by a single file live in that file; share them in their own file only when a second consumer exists.
+- A flow or service is one use case or one tightly related set of them. A new use case gets its own service file under the module's `flows/`-style folder rather than growing an existing one.
+- Specs sit next to the code they test (`*.spec.ts`); e2e tests stay in `test/`.
+
+### Function arguments
+
+- **One argument:** positional is fine (`rotate(token)`).
+- **Two or more arguments of the same type** (several strings or ids), **or three or more arguments in total, or any optional argument:** take **one object** with named fields (`change({ currentPassword, newPassword })`). A swapped pair of strings compiles and is a security bug.
+- **Different types, two arguments, none optional** may stay positional (`cookies.set(res, token, expiresAt)`).
+- **Never** pass a placeholder (`{}`, `null`) to reach a later argument, and never keep a parameter nothing reads.
+- **Transaction handle:** when a method can run inside a caller's transaction, `tx`/`db` is the **first** parameter and is **required** (`sessions.revoke(tx, { sessionId, reason })`, `audit.record(tx, entry)`). Never default it to the global client: a forgotten `tx` would silently break atomicity. The type is `PrismaTransaction` (`src/prisma/prisma.service.ts`) or a `Pick<PrismaClient, ...>` of just the delegates used.
+- Controllers pass the validated DTO straight to the service when the field names match, instead of copying fields one by one.
+- The caller's identity (user, session, tenant) comes from `RequestContext` inside the service, not as extra id arguments from the controller.
+
+### Duplication and naming
+
+- The third copy of the same block (an audit entry, a find-validate-consume sequence) becomes a helper. Name it for the intent (`recordAccountEvent`, `redeem`), and put it with the data it works on.
+- A value that is decided by another argument is derived inside, not passed in (a token's TTL follows its type).
+- Replace unreadable derived types (`Parameters<Parameters<...>[0]>[0]`) with a named type exported from where the thing is defined.
+- Keep comments for the non-obvious why (security reasons, ordering, race handling); do not narrate what the code does.
