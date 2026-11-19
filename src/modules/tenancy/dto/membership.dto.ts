@@ -1,5 +1,18 @@
 import { ApiProperty } from '@nestjs/swagger';
-import type { UserMembership } from '../user-memberships.service.js';
+import type {
+  RoleSummary,
+  UserMembership,
+} from '../user-memberships.service.js';
+
+export class RoleSummaryResponse implements RoleSummary {
+  @ApiProperty({
+    example: 'owner',
+    description: 'Stable machine key; use it in code, not the name.',
+  })
+  key!: string;
+  @ApiProperty({ example: 'Owner', description: 'Display name for the UI.' })
+  name!: string;
+}
 
 /** One clinic a user belongs to (login response and `GET /me/memberships`). */
 export class MembershipResponse implements UserMembership {
@@ -10,11 +23,10 @@ export class MembershipResponse implements UserMembership {
   @ApiProperty({ enum: ['invited', 'active', 'suspended', 'removed'] })
   membershipStatus!: UserMembership['membershipStatus'];
   @ApiProperty({
-    type: [String],
-    example: ['Owner'],
-    description: 'Display names of the roles held in that clinic.',
+    type: [RoleSummaryResponse],
+    description: 'Roles held in that clinic.',
   })
-  roles!: string[];
+  roles!: RoleSummaryResponse[];
 }
 
 export class MembershipListEnvelope {

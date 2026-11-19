@@ -105,28 +105,28 @@ export class UpdateBranchDto {
   @MaxLength(120)
   name?: string;
 
-  @ApiPropertyOptional({ nullable: true, maxLength: 200 })
+  @ApiPropertyOptional({ type: String, nullable: true, maxLength: 200 })
   @Trim()
   @IsOptional()
   @IsString()
   @MaxLength(200)
   addressLine?: string | null;
 
-  @ApiPropertyOptional({ nullable: true, maxLength: 120 })
+  @ApiPropertyOptional({ type: String, nullable: true, maxLength: 120 })
   @Trim()
   @IsOptional()
   @IsString()
   @MaxLength(120)
   city?: string | null;
 
-  @ApiPropertyOptional({ nullable: true, maxLength: 120 })
+  @ApiPropertyOptional({ type: String, nullable: true, maxLength: 120 })
   @Trim()
   @IsOptional()
   @IsString()
   @MaxLength(120)
   province?: string | null;
 
-  @ApiPropertyOptional({ nullable: true, example: 'Asia/Manila' })
+  @ApiPropertyOptional({ type: String, nullable: true, example: 'Asia/Manila' })
   @IsOptional()
   @IsString()
   @IsTimeZone()

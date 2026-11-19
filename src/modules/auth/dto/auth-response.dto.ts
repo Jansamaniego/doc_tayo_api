@@ -22,6 +22,7 @@ export class LoginData {
   @ApiProperty({ type: [MembershipResponse] })
   memberships!: MembershipResponse[];
   @ApiProperty({
+    type: String,
     format: 'uuid',
     nullable: true,
     description:

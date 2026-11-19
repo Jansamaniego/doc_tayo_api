@@ -27,14 +27,18 @@ export class UpdateTenantDto {
   @IsTimeZone()
   timezone?: string;
 
-  @ApiPropertyOptional({ nullable: true, maxLength: 254 })
+  @ApiPropertyOptional({ type: String, nullable: true, maxLength: 254 })
   @Trim()
   @IsOptional()
   @IsEmail()
   @MaxLength(254)
   contactEmail?: string | null;
 
-  @ApiPropertyOptional({ nullable: true, example: '+639171234567' })
+  @ApiPropertyOptional({
+    type: String,
+    nullable: true,
+    example: '+639171234567',
+  })
   @Trim()
   @IsOptional()
   @Matches(/^\+[1-9]\d{6,14}$/)

@@ -140,11 +140,14 @@ describe('current user: /me, memberships and sessions (real PostgreSQL)', () => 
       expect(res.body.data[0]).toMatchObject({
         tenantStatus: 'active',
         membershipStatus: 'active',
-        roles: ['Doctor', 'Owner'],
+        roles: [
+          { key: 'doctor', name: 'Doctor' },
+          { key: 'owner', name: 'Owner' },
+        ],
       });
       expect(res.body.data[1]).toMatchObject({
         tenantStatus: 'suspended',
-        roles: ['Receptionist'],
+        roles: [{ key: 'receptionist', name: 'Receptionist' }],
       });
     });
 

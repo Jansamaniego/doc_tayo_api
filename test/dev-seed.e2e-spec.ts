@@ -38,7 +38,7 @@ describe('development seed (real PostgreSQL)', () => {
     expect(res.body.data.memberships).toEqual([
       expect.objectContaining({
         tenantName: DEV_SEED.clinicName,
-        roles: ['Owner'],
+        roles: [{ key: 'owner', name: 'Owner' }],
       }),
     ]);
     const auth = {

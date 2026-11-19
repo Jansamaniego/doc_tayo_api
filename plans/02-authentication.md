@@ -562,6 +562,7 @@ Added once the first frontend integration was planned; none of it changes the de
 - `npm run db:seed:dev` (`src/dev/seed.ts`): a clinic with an owner and a receptionist, a second branch and a documented password; idempotent; refuses `NODE_ENV=production`. It ships in `dist/` like all of `src/` and is not reachable from any route.
 - CORS: `Retry-After` is now in `exposedHeaders` (without it, browser code cannot read the header that `429` responses rely on). Credentialed preflight and responses are covered by `test/cors-credentials.e2e-spec.ts`.
 - `docs/frontend-integration.md`.
+- Contract fixes found when the frontend agent planned against `openapi.json`: (1) the document had no error schema and no security scheme, so `ErrorResponse` (with named `ErrorCode` / `FieldErrorCode` enums) is attached to every 4xx/5xx response and a `bearer` scheme is required on every operation except `@Public()` ones (`finishOpenApiDocument`; `@Public()` carries an `x-public` marker that is removed from the output); (2) eight nullable string/uuid fields had no explicit `type` and were emitted as `object`; (3) memberships carried role display names only, so `roles` is now a list of `{ key, name }` (**a breaking change to the `roles` shape, made before any client existed**). Guarded by new tests in `test/openapi-contract.e2e-spec.ts`.
 
 ### Follow-up: code organisation (no behaviour change)
 

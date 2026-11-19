@@ -5,13 +5,20 @@ import type {
 } from '../../generated/prisma/client.js';
 import { PrismaService } from '../../prisma/prisma.service.js';
 
+export interface RoleSummary {
+  /** Stable machine key (`owner`, `doctor`, ...); use this in code. */
+  key: string;
+  /** Display name; use this in the UI. */
+  name: string;
+}
+
 export interface UserMembership {
   tenantId: string;
   tenantName: string;
   tenantStatus: TenantStatus;
   membershipStatus: MembershipStatus;
-  /** Display names of the roles held in that tenant. */
-  roles: string[];
+  /** Roles held in that tenant, by display name. */
+  roles: RoleSummary[];
 }
 
 /**
@@ -30,7 +37,7 @@ export class UserMembershipsService {
       select: {
         status: true,
         tenant: { select: { id: true, name: true, status: true } },
-        roles: { select: { role: { select: { name: true } } } },
+        roles: { select: { role: { select: { key: true, name: true } } } },
       },
       orderBy: [{ tenant: { name: 'asc' } }, { id: 'asc' }],
     });
@@ -39,7 +46,9 @@ export class UserMembershipsService {
       tenantName: row.tenant.name,
       tenantStatus: row.tenant.status,
       membershipStatus: row.status,
-      roles: row.roles.map((r) => r.role.name).sort(),
+      roles: row.roles
+        .map(({ role }) => ({ key: role.key, name: role.name }))
+        .sort((a, b) => a.name.localeCompare(b.name)),
     }));
   }
 }

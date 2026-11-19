@@ -27,15 +27,30 @@
             }
           },
           "401": {
-            "description": "INVALID_CREDENTIALS"
+            "description": "INVALID_CREDENTIALS",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           },
           "429": {
-            "description": "RATE_LIMITED (see Retry-After)"
+            "description": "RATE_LIMITED (see Retry-After)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           }
         },
         "tags": [
           "auth"
-        ]
+        ],
+        "security": []
       }
     },
     "/api/v1/auth/refresh": {
@@ -54,15 +69,30 @@
             }
           },
           "401": {
-            "description": "UNAUTHENTICATED"
+            "description": "UNAUTHENTICATED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           },
           "429": {
-            "description": "RATE_LIMITED (see Retry-After)"
+            "description": "RATE_LIMITED (see Retry-After)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           }
         },
         "tags": [
           "auth"
-        ]
+        ],
+        "security": []
       }
     },
     "/api/v1/auth/logout": {
@@ -74,11 +104,23 @@
             "description": "The current session is revoked."
           },
           "429": {
-            "description": "RATE_LIMITED (see Retry-After)"
+            "description": "RATE_LIMITED (see Retry-After)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           }
         },
         "tags": [
           "auth"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
         ]
       }
     },
@@ -91,11 +133,23 @@
             "description": "Every session of the user is revoked."
           },
           "429": {
-            "description": "RATE_LIMITED (see Retry-After)"
+            "description": "RATE_LIMITED (see Retry-After)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           }
         },
         "tags": [
           "auth"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
         ]
       }
     },
@@ -125,11 +179,23 @@
             }
           },
           "429": {
-            "description": "RATE_LIMITED (see Retry-After)"
+            "description": "RATE_LIMITED (see Retry-After)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           }
         },
         "tags": [
           "auth"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
         ]
       }
     },
@@ -159,12 +225,20 @@
             }
           },
           "429": {
-            "description": "RATE_LIMITED (see Retry-After)"
+            "description": "RATE_LIMITED (see Retry-After)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           }
         },
         "tags": [
           "auth"
-        ]
+        ],
+        "security": []
       }
     },
     "/api/v1/auth/password/reset": {
@@ -186,15 +260,30 @@
             "description": "Password set; every session of the user is revoked."
           },
           "400": {
-            "description": "TOKEN_INVALID or VALIDATION_FAILED"
+            "description": "TOKEN_INVALID or VALIDATION_FAILED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           },
           "429": {
-            "description": "RATE_LIMITED (see Retry-After)"
+            "description": "RATE_LIMITED (see Retry-After)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           }
         },
         "tags": [
           "auth"
-        ]
+        ],
+        "security": []
       }
     },
     "/api/v1/auth/account/setup": {
@@ -216,15 +305,30 @@
             "description": "Account activated; sign in next."
           },
           "400": {
-            "description": "TOKEN_INVALID or VALIDATION_FAILED"
+            "description": "TOKEN_INVALID or VALIDATION_FAILED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           },
           "429": {
-            "description": "RATE_LIMITED (see Retry-After)"
+            "description": "RATE_LIMITED (see Retry-After)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           }
         },
         "tags": [
           "auth"
-        ]
+        ],
+        "security": []
       }
     },
     "/api/v1/invitations/accept": {
@@ -246,15 +350,30 @@
             "description": "Joined the clinic. Sign in next (no automatic sign-in)."
           },
           "400": {
-            "description": "TOKEN_INVALID or VALIDATION_FAILED"
+            "description": "TOKEN_INVALID or VALIDATION_FAILED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           },
           "403": {
-            "description": "TENANT_SUSPENDED or TENANT_DEACTIVATED"
+            "description": "TENANT_SUSPENDED or TENANT_DEACTIVATED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           }
         },
         "tags": [
           "invitations"
-        ]
+        ],
+        "security": []
       }
     },
     "/api/v1/tenant": {
@@ -273,14 +392,33 @@
             }
           },
           "401": {
-            "description": "UNAUTHENTICATED"
+            "description": "UNAUTHENTICATED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           },
           "403": {
-            "description": "FORBIDDEN, TENANT_NOT_SELECTED, TENANT_SUSPENDED, TENANT_DEACTIVATED or TENANT_ACCESS_DENIED"
+            "description": "FORBIDDEN, TENANT_NOT_SELECTED, TENANT_SUSPENDED, TENANT_DEACTIVATED or TENANT_ACCESS_DENIED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           }
         },
         "tags": [
           "tenant"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
         ]
       },
       "patch": {
@@ -308,14 +446,33 @@
             }
           },
           "401": {
-            "description": "UNAUTHENTICATED"
+            "description": "UNAUTHENTICATED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           },
           "403": {
-            "description": "FORBIDDEN, TENANT_NOT_SELECTED, TENANT_SUSPENDED, TENANT_DEACTIVATED or TENANT_ACCESS_DENIED"
+            "description": "FORBIDDEN, TENANT_NOT_SELECTED, TENANT_SUSPENDED, TENANT_DEACTIVATED or TENANT_ACCESS_DENIED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           }
         },
         "tags": [
           "tenant"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
         ]
       }
     },
@@ -365,14 +522,33 @@
             }
           },
           "401": {
-            "description": "UNAUTHENTICATED"
+            "description": "UNAUTHENTICATED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           },
           "403": {
-            "description": "FORBIDDEN, TENANT_NOT_SELECTED, TENANT_SUSPENDED, TENANT_DEACTIVATED or TENANT_ACCESS_DENIED"
+            "description": "FORBIDDEN, TENANT_NOT_SELECTED, TENANT_SUSPENDED, TENANT_DEACTIVATED or TENANT_ACCESS_DENIED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           }
         },
         "tags": [
           "branches"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
         ]
       },
       "post": {
@@ -400,17 +576,43 @@
             }
           },
           "401": {
-            "description": "UNAUTHENTICATED"
+            "description": "UNAUTHENTICATED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           },
           "403": {
-            "description": "FORBIDDEN, TENANT_NOT_SELECTED, TENANT_SUSPENDED, TENANT_DEACTIVATED or TENANT_ACCESS_DENIED"
+            "description": "FORBIDDEN, TENANT_NOT_SELECTED, TENANT_SUSPENDED, TENANT_DEACTIVATED or TENANT_ACCESS_DENIED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           },
           "409": {
-            "description": "CONFLICT_UNIQUE: the name is taken in this clinic."
+            "description": "CONFLICT_UNIQUE: the name is taken in this clinic.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           }
         },
         "tags": [
           "branches"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
         ]
       }
     },
@@ -430,17 +632,43 @@
             }
           },
           "401": {
-            "description": "UNAUTHENTICATED"
+            "description": "UNAUTHENTICATED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           },
           "403": {
-            "description": "FORBIDDEN, TENANT_NOT_SELECTED, TENANT_SUSPENDED, TENANT_DEACTIVATED or TENANT_ACCESS_DENIED"
+            "description": "FORBIDDEN, TENANT_NOT_SELECTED, TENANT_SUSPENDED, TENANT_DEACTIVATED or TENANT_ACCESS_DENIED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           },
           "404": {
-            "description": "NOT_FOUND (also for another clinic's branch)."
+            "description": "NOT_FOUND (also for another clinic's branch).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           }
         },
         "tags": [
           "branches"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
         ]
       },
       "patch": {
@@ -468,20 +696,53 @@
             }
           },
           "401": {
-            "description": "UNAUTHENTICATED"
+            "description": "UNAUTHENTICATED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           },
           "403": {
-            "description": "FORBIDDEN, TENANT_NOT_SELECTED, TENANT_SUSPENDED, TENANT_DEACTIVATED or TENANT_ACCESS_DENIED"
+            "description": "FORBIDDEN, TENANT_NOT_SELECTED, TENANT_SUSPENDED, TENANT_DEACTIVATED or TENANT_ACCESS_DENIED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           },
           "404": {
-            "description": "NOT_FOUND (also for another clinic's branch)."
+            "description": "NOT_FOUND (also for another clinic's branch).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           },
           "409": {
-            "description": "CONFLICT_UNIQUE: the name is taken in this clinic."
+            "description": "CONFLICT_UNIQUE: the name is taken in this clinic.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           }
         },
         "tags": [
           "branches"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
         ]
       }
     },
@@ -501,11 +762,23 @@
             }
           },
           "401": {
-            "description": "UNAUTHENTICATED"
+            "description": "UNAUTHENTICATED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           }
         },
         "tags": [
           "me"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
         ]
       }
     },
@@ -528,11 +801,23 @@
             "description": "Password changed. Other sessions are revoked; this one stays signed in."
           },
           "401": {
-            "description": "UNAUTHENTICATED"
+            "description": "UNAUTHENTICATED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           }
         },
         "tags": [
           "me"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
         ]
       }
     },
@@ -552,11 +837,23 @@
             }
           },
           "401": {
-            "description": "UNAUTHENTICATED"
+            "description": "UNAUTHENTICATED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           }
         },
         "tags": [
           "me"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
         ]
       }
     },
@@ -576,11 +873,23 @@
             }
           },
           "401": {
-            "description": "UNAUTHENTICATED"
+            "description": "UNAUTHENTICATED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           }
         },
         "tags": [
           "me"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
         ]
       }
     },
@@ -593,14 +902,33 @@
             "description": "The session is revoked."
           },
           "401": {
-            "description": "UNAUTHENTICATED"
+            "description": "UNAUTHENTICATED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           },
           "404": {
-            "description": "NOT_FOUND (also for someone else's session)."
+            "description": "NOT_FOUND (also for someone else's session).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           }
         },
         "tags": [
           "me"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
         ]
       }
     },
@@ -630,23 +958,63 @@
             }
           },
           "401": {
-            "description": "UNAUTHENTICATED"
+            "description": "UNAUTHENTICATED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           },
           "403": {
-            "description": "FORBIDDEN, TENANT_NOT_SELECTED, TENANT_SUSPENDED, TENANT_DEACTIVATED or TENANT_ACCESS_DENIED"
+            "description": "FORBIDDEN, TENANT_NOT_SELECTED, TENANT_SUSPENDED, TENANT_DEACTIVATED or TENANT_ACCESS_DENIED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           },
           "404": {
-            "description": "NOT_FOUND (also for another clinic's role)."
+            "description": "NOT_FOUND (also for another clinic's role).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           },
           "409": {
-            "description": "CONFLICT (already a member) or CONFLICT_UNIQUE (an open invitation exists: resend it)."
+            "description": "CONFLICT (already a member) or CONFLICT_UNIQUE (an open invitation exists: resend it).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           },
           "422": {
-            "description": "ROLE_NOT_ASSIGNABLE (owner)."
+            "description": "ROLE_NOT_ASSIGNABLE (owner).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           }
         },
         "tags": [
           "invitations"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
         ]
       }
     },
@@ -666,20 +1034,53 @@
             }
           },
           "401": {
-            "description": "UNAUTHENTICATED"
+            "description": "UNAUTHENTICATED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           },
           "403": {
-            "description": "FORBIDDEN, TENANT_NOT_SELECTED, TENANT_SUSPENDED, TENANT_DEACTIVATED or TENANT_ACCESS_DENIED"
+            "description": "FORBIDDEN, TENANT_NOT_SELECTED, TENANT_SUSPENDED, TENANT_DEACTIVATED or TENANT_ACCESS_DENIED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           },
           "404": {
-            "description": "NOT_FOUND (also for another clinic's invitation)."
+            "description": "NOT_FOUND (also for another clinic's invitation).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           },
           "409": {
-            "description": "CONFLICT: already accepted or revoked."
+            "description": "CONFLICT: already accepted or revoked.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           }
         },
         "tags": [
           "invitations"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
         ]
       }
     },
@@ -703,7 +1104,8 @@
         },
         "tags": [
           "health"
-        ]
+        ],
+        "security": []
       }
     },
     "/api/health/ready": {
@@ -823,115 +1225,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "properties": {
-                    "status": {
-                      "type": "string",
-                      "enum": [
-                        "error",
-                        "shutting_down"
-                      ],
-                      "example": "error"
-                    },
-                    "info": {
-                      "type": "object",
-                      "example": {
-                        "database": {
-                          "status": "up",
-                          "responseTime": 12
-                        }
-                      },
-                      "additionalProperties": {
-                        "type": "object",
-                        "required": [
-                          "status"
-                        ],
-                        "properties": {
-                          "status": {
-                            "type": "string",
-                            "enum": [
-                              "up",
-                              "degraded",
-                              "down"
-                            ]
-                          },
-                          "responseTime": {
-                            "type": "number",
-                            "description": "Time the health indicator took to respond, in ms"
-                          }
-                        },
-                        "additionalProperties": true
-                      },
-                      "nullable": true
-                    },
-                    "error": {
-                      "type": "object",
-                      "example": {
-                        "redis": {
-                          "status": "down",
-                          "message": "Could not connect",
-                          "responseTime": 3005
-                        }
-                      },
-                      "additionalProperties": {
-                        "type": "object",
-                        "required": [
-                          "status"
-                        ],
-                        "properties": {
-                          "status": {
-                            "type": "string",
-                            "enum": [
-                              "up",
-                              "degraded",
-                              "down"
-                            ]
-                          },
-                          "responseTime": {
-                            "type": "number",
-                            "description": "Time the health indicator took to respond, in ms"
-                          }
-                        },
-                        "additionalProperties": true
-                      },
-                      "nullable": true
-                    },
-                    "details": {
-                      "type": "object",
-                      "example": {
-                        "database": {
-                          "status": "up",
-                          "responseTime": 12
-                        },
-                        "redis": {
-                          "status": "down",
-                          "message": "Could not connect",
-                          "responseTime": 3005
-                        }
-                      },
-                      "additionalProperties": {
-                        "type": "object",
-                        "required": [
-                          "status"
-                        ],
-                        "properties": {
-                          "status": {
-                            "type": "string",
-                            "enum": [
-                              "up",
-                              "degraded",
-                              "down"
-                            ]
-                          },
-                          "responseTime": {
-                            "type": "number",
-                            "description": "Time the health indicator took to respond, in ms"
-                          }
-                        },
-                        "additionalProperties": true
-                      }
-                    }
-                  }
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
@@ -939,7 +1233,8 @@
         },
         "tags": [
           "health"
-        ]
+        ],
+        "security": []
       }
     }
   },
@@ -952,6 +1247,13 @@
   "tags": [],
   "servers": [],
   "components": {
+    "securitySchemes": {
+      "bearer": {
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "type": "http"
+      }
+    },
     "schemas": {
       "LoginDto": {
         "type": "object",
@@ -991,6 +1293,25 @@
           "fullName"
         ]
       },
+      "RoleSummaryResponse": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string",
+            "example": "owner",
+            "description": "Stable machine key; use it in code, not the name."
+          },
+          "name": {
+            "type": "string",
+            "example": "Owner",
+            "description": "Display name for the UI."
+          }
+        },
+        "required": [
+          "key",
+          "name"
+        ]
+      },
       "MembershipResponse": {
         "type": "object",
         "properties": {
@@ -1020,13 +1341,10 @@
             ]
           },
           "roles": {
-            "example": [
-              "Owner"
-            ],
-            "description": "Display names of the roles held in that clinic.",
+            "description": "Roles held in that clinic.",
             "type": "array",
             "items": {
-              "type": "string"
+              "$ref": "#/components/schemas/RoleSummaryResponse"
             }
           }
         },
@@ -1060,7 +1378,7 @@
             }
           },
           "activeTenantId": {
-            "type": "object",
+            "type": "string",
             "format": "uuid",
             "nullable": true,
             "description": "Chosen automatically when the user has exactly one active membership in an active clinic; otherwise null and the client calls switch-tenant."
@@ -1355,12 +1673,12 @@
             "example": "Asia/Manila"
           },
           "contactEmail": {
-            "type": "object",
+            "type": "string",
             "nullable": true,
             "maxLength": 254
           },
           "contactPhone": {
-            "type": "object",
+            "type": "string",
             "nullable": true,
             "example": "+639171234567"
           }
@@ -1508,22 +1826,22 @@
             "maxLength": 120
           },
           "addressLine": {
-            "type": "object",
+            "type": "string",
             "nullable": true,
             "maxLength": 200
           },
           "city": {
-            "type": "object",
+            "type": "string",
             "nullable": true,
             "maxLength": 120
           },
           "province": {
-            "type": "object",
+            "type": "string",
             "nullable": true,
             "maxLength": 120
           },
           "timezone": {
-            "type": "object",
+            "type": "string",
             "nullable": true,
             "example": "Asia/Manila"
           },
@@ -1556,7 +1874,7 @@
             "nullable": true
           },
           "activeTenantId": {
-            "type": "object",
+            "type": "string",
             "format": "uuid",
             "nullable": true
           },
@@ -1743,6 +2061,127 @@
         },
         "required": [
           "data"
+        ]
+      },
+      "ErrorCode": {
+        "type": "string",
+        "enum": [
+          "VALIDATION_FAILED",
+          "BAD_REQUEST",
+          "MALFORMED_JSON",
+          "PAYLOAD_TOO_LARGE",
+          "UNSUPPORTED_MEDIA_TYPE",
+          "ROUTE_NOT_FOUND",
+          "NOT_FOUND",
+          "CONFLICT_UNIQUE",
+          "CONFLICT_REFERENCE",
+          "NOT_READY",
+          "SERVICE_UNAVAILABLE",
+          "INTERNAL_ERROR",
+          "UNAUTHENTICATED",
+          "FORBIDDEN",
+          "TENANT_NOT_SELECTED",
+          "TENANT_SUSPENDED",
+          "TENANT_DEACTIVATED",
+          "TENANT_ACCESS_DENIED",
+          "INVALID_CREDENTIALS",
+          "ACCESS_TOKEN_EXPIRED",
+          "TOKEN_INVALID",
+          "ROLE_NOT_ASSIGNABLE",
+          "CONFLICT",
+          "METHOD_NOT_ALLOWED",
+          "RATE_LIMITED"
+        ]
+      },
+      "FieldErrorCode": {
+        "type": "string",
+        "enum": [
+          "REQUIRED",
+          "INVALID_FORMAT",
+          "INVALID_TYPE",
+          "INVALID_VALUE",
+          "OUT_OF_RANGE",
+          "TOO_SHORT",
+          "TOO_LONG",
+          "UNKNOWN_FIELD",
+          "PASSWORD_TOO_COMMON",
+          "PASSWORD_CONTAINS_EMAIL",
+          "PASSWORD_INCORRECT"
+        ]
+      },
+      "FieldErrorBody": {
+        "type": "object",
+        "properties": {
+          "field": {
+            "type": "string",
+            "example": "newPassword"
+          },
+          "code": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/FieldErrorCode"
+              }
+            ]
+          },
+          "message": {
+            "type": "string",
+            "description": "Static, user-safe text; never echoes input."
+          }
+        },
+        "required": [
+          "field",
+          "code",
+          "message"
+        ]
+      },
+      "ErrorBody": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "number",
+            "example": 400,
+            "description": "The HTTP status."
+          },
+          "code": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ErrorCode"
+              }
+            ]
+          },
+          "message": {
+            "type": "string",
+            "description": "Static, user-safe text."
+          },
+          "details": {
+            "description": "Present for VALIDATION_FAILED.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FieldErrorBody"
+            }
+          },
+          "requestId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Also the X-Request-Id response header; quote it to support."
+          }
+        },
+        "required": [
+          "status",
+          "code",
+          "message",
+          "requestId"
+        ]
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "$ref": "#/components/schemas/ErrorBody"
+          }
+        },
+        "required": [
+          "error"
         ]
       }
     }

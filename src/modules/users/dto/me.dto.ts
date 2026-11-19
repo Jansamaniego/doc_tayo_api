@@ -27,8 +27,8 @@ export class MeProfileData {
   emailVerifiedAt!: Date | null;
   @ApiProperty({ type: String, format: 'date-time', nullable: true })
   passwordChangedAt!: Date | null;
-  @ApiProperty({ format: 'uuid', nullable: true }) activeTenantId!:
-    string | null;
+  @ApiProperty({ type: String, format: 'uuid', nullable: true })
+  activeTenantId!: string | null;
   @ApiProperty({
     type: [String],
     example: ['branches.read', 'tenant.read'],

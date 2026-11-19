@@ -43,7 +43,7 @@ Useful URLs: API `http://localhost:3000/api/v1`, Swagger UI `http://localhost:30
 
 **Emails in development** (invitation, reset, setup links): with the default `MAIL_TRANSPORT=log` the API prints each email; the **link is in the body, printed at `debug` log level** (`LOG_LEVEL=debug`, the `.env.example` default). Copy the link from the API console.
 
-**Typed client:** generate types from the contract, for example `npx openapi-typescript docs/openapi.json -o src/api/schema.d.ts` (a suggestion; not run as part of this repository). Regenerate whenever `docs/openapi.json` changes.
+**Typed client:** generate types from the contract, for example `npx openapi-typescript docs/openapi.json -o src/api/schema.d.ts` (a suggestion; not run as part of this repository). Regenerate whenever `docs/openapi.json` changes. The contract declares the `bearer` security scheme (every operation needs it except the public ones, which have `security: []`) and the error body: every 4xx/5xx response references the `ErrorResponse` schema, whose `ErrorCode` and `FieldErrorCode` enums list every code (see [error-codes.md](error-codes.md)).
 
 ## 3. Conventions
 
@@ -87,7 +87,7 @@ export function refreshAccessToken(): Promise<string> {
 
 ## 5. Choosing and switching clinics
 
-- A user can belong to several clinics. `login` returns `memberships` (each with `tenantId`, `tenantName`, `tenantStatus`, `membershipStatus`, `roles`) and `activeTenantId`.
+- A user can belong to several clinics. `login` returns `memberships` (each with `tenantId`, `tenantName`, `tenantStatus`, `membershipStatus`, `roles`: a list of `{ key, name }`, where `key` is the stable machine key such as `owner` and `name` is the display text). Decide what a user may DO from `permissions` (`GET /me`, `switch-tenant`), not from role keys; use roles to label people and `activeTenantId`.
 - `activeTenantId` is set automatically only when the user has **exactly one** active membership in an active clinic. Otherwise it is `null`: show a clinic picker (offer the memberships whose `membershipStatus` and `tenantStatus` are both `active`; show suspended ones as unavailable) and call `POST /auth/switch-tenant` with `{ tenantId }`.
 - Any clinic-scoped call (`/tenant`, `/branches`, `/invitations`) made with no active clinic answers `403 TENANT_NOT_SELECTED`: send the user to the picker.
 - `switch-tenant` takes effect on the very next request; **the access token does not change**. Its response gives the new `tenant` and the `permissions` held there.

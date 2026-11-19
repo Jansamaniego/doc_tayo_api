@@ -119,7 +119,7 @@ describe('login, throttling and lockout (real PostgreSQL)', () => {
           tenantName: 'clinic-a',
           tenantStatus: 'active',
           membershipStatus: 'active',
-          roles: ['Owner'],
+          roles: [{ key: 'owner', name: 'Owner' }],
         },
       ]);
     });

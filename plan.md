@@ -2,7 +2,7 @@
 
 > **Scope:** Backend only (`doc-tayo-api`). The frontend has its own independent plan. This document only describes API contracts the frontend will consume, never frontend implementation.
 >
-> **Status:** Phases 1 (Project Foundation) and 2 (Multi-Tenancy Foundation) are **implemented**; Phases 3–7 are still plan-only and require approval of their child plans before implementation. This document was last aligned with the codebase after Phase 2 (see §0; per-phase deviations are recorded in each child plan's "As Built" section).
+> **Status:** Phases 1 (Project Foundation), 2 (Multi-Tenancy Foundation) and 3 (Authentication) are **implemented**; Phases 4–7 are still plan-only and require approval of their child plans before implementation. This document was last aligned with the codebase after Phase 3 (see §0; per-phase deviations are recorded in each child plan's "As Built" section).
 >
 > **Sync rule:** this plan and the child plans describe the code **as it is**. Whenever implemented code differs from a plan, the plan is edited in the same change (see `CLAUDE.md`, "Plans and docs stay aligned with the code").
 >

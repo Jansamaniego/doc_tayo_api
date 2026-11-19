@@ -11,6 +11,8 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
 import type { NextFunction, Request, Response } from 'express';
+import { ErrorResponse } from './common/dto/error-response.dto.js';
+import { finishOpenApiDocument } from './common/http/openapi.js';
 import { toApiError } from './common/errors/to-api-error.js';
 import { validationExceptionFactory } from './common/errors/validation.js';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter.js';
@@ -36,7 +38,7 @@ const JSON_BODY_LIMIT = '1mb';
  * writes `docs/openapi.json`, the contract handed to the frontend.
  */
 export function buildOpenApiDocument(app: NestExpressApplication) {
-  return SwaggerModule.createDocument(
+  const document = SwaggerModule.createDocument(
     app,
     new DocumentBuilder()
       .setTitle('DocTayo API')
@@ -44,8 +46,11 @@ export function buildOpenApiDocument(app: NestExpressApplication) {
         'Clinic management backend. Errors use { error: { status, code, message, details?, requestId } }.',
       )
       .setVersion('1')
+      .addBearerAuth({ type: 'http', scheme: 'bearer', bearerFormat: 'JWT' })
       .build(),
+    { extraModels: [ErrorResponse] },
   );
+  return finishOpenApiDocument(document);
 }
 
 /**
