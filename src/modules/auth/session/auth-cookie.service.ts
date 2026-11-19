@@ -1,9 +1,9 @@
 import { Inject, Injectable } from '@nestjs/common';
 import type { ConfigType } from '@nestjs/config';
 import type { CookieOptions, Request, Response } from 'express';
-import { DomainError } from '../../common/errors/domain-error.js';
-import { Clock } from '../../common/security/clock.js';
-import { authConfig, corsConfig } from '../../config/configuration.js';
+import { DomainError } from '../../../common/errors/domain-error.js';
+import { Clock } from '../../../common/security/clock.js';
+import { authConfig, corsConfig } from '../../../config/configuration.js';
 
 export const REFRESH_COOKIE = 'dt_refresh';
 /** The cookie is only ever sent to the auth endpoints. */

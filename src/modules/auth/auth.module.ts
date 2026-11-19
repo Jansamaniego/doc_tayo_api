@@ -4,26 +4,26 @@ import { JwtModule } from '@nestjs/jwt';
 import { AUTHENTICATOR } from '../../common/auth/authenticator.js';
 import { AuditModule } from '../audit/audit.module.js';
 import { MailModule } from '../mail/mail.module.js';
-import { AccountSetupService } from './account-setup.service.js';
-import { PasswordChangeService } from './password-change.service.js';
-import { PasswordRecoveryService } from './password-recovery.service.js';
-import { UserTokenService } from './user-token.service.js';
+import { AccountSetupService } from './flows/account-setup.service.js';
+import { PasswordChangeService } from './flows/password-change.service.js';
+import { PasswordRecoveryService } from './flows/password-recovery.service.js';
+import { UserTokenService } from './flows/user-token.service.js';
 import {
   AccessTokenService,
   JWT_AUDIENCE,
   JWT_ISSUER,
-} from './access-token.service.js';
+} from './session/access-token.service.js';
 import { authConfig } from '../../config/configuration.js';
 import { AuthController } from './auth.controller.js';
 import { InvitationAcceptanceController } from './invitation-acceptance.controller.js';
-import { InvitationAcceptanceService } from './invitation-acceptance.service.js';
-import { AuthCookieService } from './auth-cookie.service.js';
-import { JwtAuthenticator } from './jwt.authenticator.js';
-import { LoginService } from './login.service.js';
-import { PasswordHasher } from './password-hasher.js';
-import { SwitchTenantService } from './switch-tenant.service.js';
-import { RefreshService } from './refresh.service.js';
-import { SessionService } from './session.service.js';
+import { InvitationAcceptanceService } from './flows/invitation-acceptance.service.js';
+import { AuthCookieService } from './session/auth-cookie.service.js';
+import { JwtAuthenticator } from './session/jwt.authenticator.js';
+import { LoginService } from './flows/login.service.js';
+import { PasswordHasher } from './password/password-hasher.js';
+import { SwitchTenantService } from './flows/switch-tenant.service.js';
+import { RefreshService } from './session/refresh.service.js';
+import { SessionService } from './session/session.service.js';
 
 @Module({
   imports: [

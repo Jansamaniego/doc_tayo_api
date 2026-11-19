@@ -3,7 +3,7 @@ import type { Request } from 'express';
 import type {
   Authenticator,
   Principal,
-} from '../../common/auth/authenticator.js';
+} from '../../../common/auth/authenticator.js';
 import { AccessTokenService } from './access-token.service.js';
 import { SessionService } from './session.service.js';
 

@@ -331,14 +331,16 @@ src/
   common/security/             token.ts (random token + SHA-256), clock.ts (injectable clock for expiry tests)
   context/                     request-context.ts (+ sessionId)
   modules/
-    auth/                      auth.controller.ts, login.service.ts, session.service.ts, refresh.service.ts,
-                               password-recovery.service.ts, account-setup.service.ts,
-                               invitation-acceptance.service.ts, jwt.authenticator.ts,
-                               access-token.service.ts, auth-cookie.service.ts, auth-throttle.ts,
-                               invitation-acceptance.controller.ts, password-change.service.ts,
-                               password-validation.ts, switch-tenant.service.ts, user-token.service.ts,
-                               password-hasher.ts, password-policy.ts, common-passwords.ts,
-                               lockout.ts, auth.module.ts, dto/
+    auth/                      auth.controller.ts, invitation-acceptance.controller.ts, auth.module.ts,
+                               throttle.ts, dto/
+      session/                 access-token.service.ts, jwt.authenticator.ts, session.service.ts,
+                               refresh.service.ts, auth-cookie.service.ts
+      password/                password-hasher.ts, password-policy.ts (policy + assertPasswordPolicy),
+                               common-passwords.ts (+ specs)
+      flows/                   login.service.ts (+ lockout constants), password-recovery.service.ts,
+                               account-setup.service.ts, password-change.service.ts,
+                               invitation-acceptance.service.ts, switch-tenant.service.ts,
+                               user-token.service.ts
     users/                     me.controller.ts, me.service.ts, users.module.ts, dto/
     members/                   invitations.controller.ts, invitations.service.ts, members.module.ts, dto/
     mail/                      mail.module.ts, mail-queue.service.ts, mail-outbox.handler.ts, mails/{emails,layout}.ts

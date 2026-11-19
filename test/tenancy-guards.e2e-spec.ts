@@ -2,7 +2,7 @@ import type { NestExpressApplication } from '@nestjs/platform-express';
 import request from 'supertest';
 import type { PrismaClient } from '../src/generated/prisma/client.js';
 import { AUTHENTICATOR } from '../src/common/auth/authenticator.js';
-import { JwtAuthenticator } from '../src/modules/auth/jwt.authenticator.js';
+import { JwtAuthenticator } from '../src/modules/auth/session/jwt.authenticator.js';
 import { createTestApp } from './setup/create-test-app.js';
 import { createOwnerClient, resetTenancyData } from './support/db.js';
 import { bearer } from './support/test-authenticator.js';

@@ -17,7 +17,7 @@ src/
   modules/tenants/   onboarding + lifecycle services, GET/PATCH /tenant
   modules/branches/  GET/POST/GET :id/PATCH :id /branches
   modules/audit/     AuditService (same-transaction, append-only)
-  modules/auth/      login, access tokens, sessions, refresh rotation, password recovery, account setup, invitation acceptance, JwtAuthenticator
+  modules/auth/      controllers + throttle rules; session/ (tokens, sessions, refresh, cookie, JwtAuthenticator), password/ (hasher, policy), flows/ (login, recovery, setup, change, invitation acceptance, switch tenant)
   modules/users/     /me, /me/memberships, /me/sessions, POST /me/password
   modules/members/   invitations (create, resend; tenant client only)
   modules/mail/      transactional-outbox email (MailQueue, mail classes, outbox handler)

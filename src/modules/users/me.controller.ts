@@ -17,7 +17,7 @@ import {
 } from '@nestjs/swagger';
 import { TenantNotRequired } from '../../common/decorators/tenant-not-required.decorator.js';
 import { UserThrottleGuard } from '../../common/guards/user-throttle.guard.js';
-import { PasswordChangeService } from '../auth/password-change.service.js';
+import { PasswordChangeService } from '../auth/flows/password-change.service.js';
 import { MembershipListEnvelope } from '../tenancy/dto/membership.dto.js';
 import {
   ChangePasswordDto,

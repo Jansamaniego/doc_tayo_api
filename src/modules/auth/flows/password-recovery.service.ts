@@ -1,13 +1,13 @@
 import { Injectable } from '@nestjs/common';
-import { DomainError } from '../../common/errors/domain-error.js';
-import { Clock } from '../../common/security/clock.js';
-import { normalizeEmail } from '../../common/validation/email.js';
-import { PrismaService } from '../../prisma/prisma.service.js';
-import { AuditService } from '../audit/audit.service.js';
-import { MailQueue } from '../mail/mail-queue.service.js';
-import { PasswordHasher } from './password-hasher.js';
-import { assertPasswordPolicy } from './password-validation.js';
-import { SessionService } from './session.service.js';
+import { DomainError } from '../../../common/errors/domain-error.js';
+import { Clock } from '../../../common/security/clock.js';
+import { normalizeEmail } from '../../../common/validation/email.js';
+import { PrismaService } from '../../../prisma/prisma.service.js';
+import { AuditService } from '../../audit/audit.service.js';
+import { MailQueue } from '../../mail/mail-queue.service.js';
+import { PasswordHasher } from '../password/password-hasher.js';
+import { assertPasswordPolicy } from '../password/password-policy.js';
+import { SessionService } from '../session/session.service.js';
 import {
   PASSWORD_RESET_TTL_MS,
   UserTokenService,

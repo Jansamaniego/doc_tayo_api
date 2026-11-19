@@ -1,17 +1,24 @@
 import { Injectable } from '@nestjs/common';
-import { DomainError } from '../../common/errors/domain-error.js';
-import { Clock } from '../../common/security/clock.js';
-import { normalizeEmail } from '../../common/validation/email.js';
-import { PrismaService } from '../../prisma/prisma.service.js';
-import { AuditService } from '../audit/audit.service.js';
+import { DomainError } from '../../../common/errors/domain-error.js';
+import { Clock } from '../../../common/security/clock.js';
+import { normalizeEmail } from '../../../common/validation/email.js';
+import { PrismaService } from '../../../prisma/prisma.service.js';
+import { AuditService } from '../../audit/audit.service.js';
 import {
   UserMembershipsService,
   type UserMembership,
-} from '../tenancy/user-memberships.service.js';
-import { AccessTokenService } from './access-token.service.js';
-import { LOCKOUT_DURATION_MS, LOCKOUT_THRESHOLD } from './lockout.js';
-import { PasswordHasher } from './password-hasher.js';
-import { SessionService, type SessionMeta } from './session.service.js';
+} from '../../tenancy/user-memberships.service.js';
+import { AccessTokenService } from '../session/access-token.service.js';
+import { PasswordHasher } from '../password/password-hasher.js';
+import {
+  SessionService,
+  type SessionMeta,
+} from '../session/session.service.js';
+
+/** Consecutive failed logins before the account locks (plans/02 §9.2). */
+const LOCKOUT_THRESHOLD = 10;
+/** Lock length. It expires on its own, which limits lockout-as-denial-of-service. */
+const LOCKOUT_DURATION_MS = 15 * 60 * 1000;
 
 export interface LoginResult {
   accessToken: string;

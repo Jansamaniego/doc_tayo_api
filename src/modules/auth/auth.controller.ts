@@ -16,12 +16,8 @@ import { DomainError } from '../../common/errors/domain-error.js';
 import { RequestContext } from '../../context/request-context.js';
 import { AuditService } from '../audit/audit.service.js';
 import { PrismaService } from '../../prisma/prisma.service.js';
-import { AuthCookieService } from './auth-cookie.service.js';
-import {
-  FIVE_PER_FIFTEEN,
-  IpLimited,
-  ipAndEmailTracker,
-} from './auth-throttle.js';
+import { AuthCookieService } from './session/auth-cookie.service.js';
+import { FIVE_PER_FIFTEEN, IpLimited, ipAndEmailTracker } from './throttle.js';
 import {
   AccountSetupDto,
   ForgotPasswordDto,
@@ -29,18 +25,18 @@ import {
   ResetPasswordDto,
   SwitchTenantDto,
 } from './dto/login.dto.js';
-import { AccountSetupService } from './account-setup.service.js';
-import { PasswordRecoveryService } from './password-recovery.service.js';
+import { AccountSetupService } from './flows/account-setup.service.js';
+import { PasswordRecoveryService } from './flows/password-recovery.service.js';
 import {
   AcceptedEnvelope,
   LoginEnvelope,
   RefreshEnvelope,
   SwitchTenantEnvelope,
 } from './dto/auth-response.dto.js';
-import { LoginService } from './login.service.js';
-import { RefreshService } from './refresh.service.js';
-import { SessionService } from './session.service.js';
-import { SwitchTenantService } from './switch-tenant.service.js';
+import { LoginService } from './flows/login.service.js';
+import { RefreshService } from './session/refresh.service.js';
+import { SessionService } from './session/session.service.js';
+import { SwitchTenantService } from './flows/switch-tenant.service.js';
 
 @ApiTags('auth')
 @ApiTooManyRequestsResponse({ description: 'RATE_LIMITED (see Retry-After)' })

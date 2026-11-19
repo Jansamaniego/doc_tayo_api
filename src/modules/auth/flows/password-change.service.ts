@@ -1,14 +1,14 @@
 import { Injectable } from '@nestjs/common';
-import { DomainError } from '../../common/errors/domain-error.js';
-import { FIELD_ERROR_CODES } from '../../common/errors/error-codes.js';
-import { Clock } from '../../common/security/clock.js';
-import { RequestContext } from '../../context/request-context.js';
-import { PrismaService } from '../../prisma/prisma.service.js';
-import { AuditService } from '../audit/audit.service.js';
-import { MailQueue } from '../mail/mail-queue.service.js';
-import { PasswordHasher } from './password-hasher.js';
-import { assertPasswordPolicy } from './password-validation.js';
-import { SessionService } from './session.service.js';
+import { DomainError } from '../../../common/errors/domain-error.js';
+import { FIELD_ERROR_CODES } from '../../../common/errors/error-codes.js';
+import { Clock } from '../../../common/security/clock.js';
+import { RequestContext } from '../../../context/request-context.js';
+import { PrismaService } from '../../../prisma/prisma.service.js';
+import { AuditService } from '../../audit/audit.service.js';
+import { MailQueue } from '../../mail/mail-queue.service.js';
+import { PasswordHasher } from '../password/password-hasher.js';
+import { assertPasswordPolicy } from '../password/password-policy.js';
+import { SessionService } from '../session/session.service.js';
 
 /** Change password for the signed-in user (POST /me/password). */
 @Injectable()

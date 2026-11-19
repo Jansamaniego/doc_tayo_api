@@ -1,11 +1,11 @@
 import { Injectable } from '@nestjs/common';
-import { Clock } from '../../common/security/clock.js';
-import { generateToken, hashToken } from '../../common/security/token.js';
+import { Clock } from '../../../common/security/clock.js';
+import { generateToken, hashToken } from '../../../common/security/token.js';
 import type {
   PrismaClient,
   UserTokenType,
-} from '../../generated/prisma/client.js';
-import { PrismaService } from '../../prisma/prisma.service.js';
+} from '../../../generated/prisma/client.js';
+import { PrismaService } from '../../../prisma/prisma.service.js';
 
 export type UserTokenDb = Pick<PrismaClient, 'userToken'>;
 

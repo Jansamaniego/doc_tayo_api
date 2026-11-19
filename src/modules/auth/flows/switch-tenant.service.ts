@@ -1,9 +1,9 @@
 import { Injectable } from '@nestjs/common';
-import { DomainError } from '../../common/errors/domain-error.js';
-import { PrismaService } from '../../prisma/prisma.service.js';
-import { AuditService } from '../audit/audit.service.js';
-import { MembershipResolver } from '../tenancy/membership-resolver.js';
-import { tenantAccessError } from '../tenancy/tenant-access.js';
+import { DomainError } from '../../../common/errors/domain-error.js';
+import { PrismaService } from '../../../prisma/prisma.service.js';
+import { AuditService } from '../../audit/audit.service.js';
+import { MembershipResolver } from '../../tenancy/membership-resolver.js';
+import { tenantAccessError } from '../../tenancy/tenant-access.js';
 
 export interface SwitchTenantResult {
   activeTenantId: string;

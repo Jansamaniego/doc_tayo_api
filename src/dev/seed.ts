@@ -2,7 +2,7 @@ import type { INestApplicationContext } from '@nestjs/common';
 import type { ConfigType } from '@nestjs/config';
 import { appConfig } from '../config/configuration.js';
 import { PrismaService } from '../prisma/prisma.service.js';
-import { PasswordHasher } from '../modules/auth/password-hasher.js';
+import { PasswordHasher } from '../modules/auth/password/password-hasher.js';
 import { TenantOnboardingService } from '../modules/tenants/tenant-onboarding.service.js';
 
 /**

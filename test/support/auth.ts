@@ -1,5 +1,5 @@
 import type { PrismaClient } from '../../src/generated/prisma/client.js';
-import { PasswordHasher } from '../../src/modules/auth/password-hasher.js';
+import { PasswordHasher } from '../../src/modules/auth/password/password-hasher.js';
 
 /** Same cheap parameters as .env.test, so fixtures match what the app verifies. */
 const hasher = new PasswordHasher({

@@ -12,7 +12,7 @@ import { PermissionsGuard } from '../../common/guards/permissions.guard.js';
 import { requestContextMiddleware } from '../../context/request-context.middleware.js';
 import { RequestContext } from '../../context/request-context.js';
 import { AuthModule } from '../auth/auth.module.js';
-import { throttlerOptions } from '../auth/auth-throttle.js';
+import { throttlerOptions } from '../auth/throttle.js';
 import {
   MembershipResolver,
   PrismaMembershipResolver,

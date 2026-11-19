@@ -7,9 +7,9 @@ import {
 } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import { Public } from '../../common/decorators/public.decorator.js';
-import { FIVE_PER_FIFTEEN } from './auth-throttle.js';
+import { FIVE_PER_FIFTEEN } from './throttle.js';
 import { AcceptInvitationDto } from './dto/login.dto.js';
-import { InvitationAcceptanceService } from './invitation-acceptance.service.js';
+import { InvitationAcceptanceService } from './flows/invitation-acceptance.service.js';
 
 /** Public: the emailed token is the credential. Lives in `auth` (unscoped client). */
 @ApiTags('invitations')

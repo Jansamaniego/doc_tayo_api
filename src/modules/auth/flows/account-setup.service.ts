@@ -1,10 +1,10 @@
 import { Injectable } from '@nestjs/common';
-import { DomainError } from '../../common/errors/domain-error.js';
-import { Clock } from '../../common/security/clock.js';
-import { PrismaService } from '../../prisma/prisma.service.js';
-import { AuditService } from '../audit/audit.service.js';
-import { PasswordHasher } from './password-hasher.js';
-import { assertPasswordPolicy } from './password-validation.js';
+import { DomainError } from '../../../common/errors/domain-error.js';
+import { Clock } from '../../../common/security/clock.js';
+import { PrismaService } from '../../../prisma/prisma.service.js';
+import { AuditService } from '../../audit/audit.service.js';
+import { PasswordHasher } from '../password/password-hasher.js';
+import { assertPasswordPolicy } from '../password/password-policy.js';
 import { UserTokenService } from './user-token.service.js';
 
 /**

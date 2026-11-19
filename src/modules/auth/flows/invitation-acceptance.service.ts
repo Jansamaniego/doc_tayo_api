@@ -1,15 +1,15 @@
 import { Injectable } from '@nestjs/common';
-import { DomainError } from '../../common/errors/domain-error.js';
+import { DomainError } from '../../../common/errors/domain-error.js';
 import {
   FIELD_ERROR_CODES,
   type FieldError,
-} from '../../common/errors/error-codes.js';
-import { Clock } from '../../common/security/clock.js';
-import { hashToken } from '../../common/security/token.js';
-import { PrismaService } from '../../prisma/prisma.service.js';
-import { AuditService } from '../audit/audit.service.js';
-import { PasswordHasher } from './password-hasher.js';
-import { assertPasswordPolicy } from './password-validation.js';
+} from '../../../common/errors/error-codes.js';
+import { Clock } from '../../../common/security/clock.js';
+import { hashToken } from '../../../common/security/token.js';
+import { PrismaService } from '../../../prisma/prisma.service.js';
+import { AuditService } from '../../audit/audit.service.js';
+import { PasswordHasher } from '../password/password-hasher.js';
+import { assertPasswordPolicy } from '../password/password-policy.js';
 
 /**
  * Accepts an emailed invitation (plans/02-authentication.md §7.3). Public:

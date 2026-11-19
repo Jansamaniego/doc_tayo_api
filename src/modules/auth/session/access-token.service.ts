@@ -1,9 +1,9 @@
 import { Inject, Injectable } from '@nestjs/common';
 import type { ConfigType } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
-import { DomainError } from '../../common/errors/domain-error.js';
-import { Clock } from '../../common/security/clock.js';
-import { authConfig } from '../../config/configuration.js';
+import { DomainError } from '../../../common/errors/domain-error.js';
+import { Clock } from '../../../common/security/clock.js';
+import { authConfig } from '../../../config/configuration.js';
 
 export const JWT_ISSUER = 'doctayo-api';
 export const JWT_AUDIENCE = 'doctayo';

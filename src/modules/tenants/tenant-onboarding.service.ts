@@ -14,7 +14,7 @@ import { AuditService } from '../audit/audit.service.js';
 import {
   ACCOUNT_SETUP_TTL_MS,
   UserTokenService,
-} from '../auth/user-token.service.js';
+} from '../auth/flows/user-token.service.js';
 import { MailQueue } from '../mail/mail-queue.service.js';
 
 export interface OnboardTenantInput {

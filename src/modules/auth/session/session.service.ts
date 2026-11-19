@@ -1,13 +1,13 @@
 import { Inject, Injectable } from '@nestjs/common';
 import type { ConfigType } from '@nestjs/config';
-import { Clock } from '../../common/security/clock.js';
-import { generateToken, hashToken } from '../../common/security/token.js';
-import { authConfig } from '../../config/configuration.js';
+import { Clock } from '../../../common/security/clock.js';
+import { generateToken, hashToken } from '../../../common/security/token.js';
+import { authConfig } from '../../../config/configuration.js';
 import type {
   PrismaClient,
   SessionRevokedReason,
-} from '../../generated/prisma/client.js';
-import { PrismaService } from '../../prisma/prisma.service.js';
+} from '../../../generated/prisma/client.js';
+import { PrismaService } from '../../../prisma/prisma.service.js';
 
 /** The session/refresh-token delegates; satisfied by PrismaService or a transaction. */
 export type SessionDb = Pick<PrismaClient, 'session' | 'refreshToken'>;

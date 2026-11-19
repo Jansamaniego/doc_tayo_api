@@ -1,6 +1,6 @@
 # Authentication (Phase 3)
 
-Source of truth for how people sign in. Design and decisions: [plans/02-authentication.md](../plans/02-authentication.md) and ADR-0011, -0012, -0013. Code: `src/modules/auth`, `src/modules/users`, `src/modules/mail`, `src/modules/maintenance`.
+Source of truth for how people sign in. Design and decisions: [plans/02-authentication.md](../plans/02-authentication.md) and ADR-0011, -0012, -0013. Code: `src/modules/auth` (`session/`, `password/`, `flows/`), `src/modules/users`, `src/modules/mail`, `src/modules/maintenance`.
 
 ## The model in one minute
 

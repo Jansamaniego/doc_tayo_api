@@ -4,7 +4,7 @@ import { Clock } from '../../common/security/clock.js';
 import { RequestContext } from '../../context/request-context.js';
 import { PrismaService } from '../../prisma/prisma.service.js';
 import { AuditService } from '../audit/audit.service.js';
-import { SessionService } from '../auth/session.service.js';
+import { SessionService } from '../auth/session/session.service.js';
 import { MembershipResolver } from '../tenancy/membership-resolver.js';
 import { tenantAccessError } from '../tenancy/tenant-access.js';
 import {
