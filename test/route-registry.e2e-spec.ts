@@ -12,6 +12,10 @@ interface RouteInfo {
   permissions: string[];
 }
 
+/** `POST auth/login (AuthController.signIn)` -> `POST auth/login`. */
+const shortRoute = (route: string): string =>
+  route.replace(/ \(.*\)$/, '').replace(/\/+$/, '');
+
 /** Every route must be exactly one category (master plan §3.3). */
 export function routeProblems(routes: RouteInfo[]): string[] {
   const problems: string[] = [];
@@ -110,6 +114,55 @@ describe('route registry (e2e)', () => {
 
   it('every route is exactly one of: public, tenant-not-required, or tenant-scoped with permissions', () => {
     expect(routeProblems(discoverRoutes())).toEqual([]);
+  });
+
+  it('the PUBLIC routes are exactly the documented ones (a new open route needs a conscious change here)', () => {
+    const publicRoutes = discoverRoutes()
+      .filter((r) => r.isPublic)
+      .map((r) => shortRoute(r.route))
+      .sort();
+    expect(publicRoutes).toEqual(
+      [
+        'GET health', // liveness
+        'GET health/ready', // readiness
+        'POST auth/login',
+        'POST auth/refresh',
+        'POST auth/password/forgot',
+        'POST auth/password/reset',
+        'POST auth/account/setup',
+        'POST invitations/accept',
+      ].sort(),
+    );
+  });
+
+  it('session-scoped routes need no tenant but do need authentication', () => {
+    const routes = discoverRoutes();
+    const noTenant = routes
+      .filter((r) => r.tenantNotRequired)
+      .map((r) => shortRoute(r.route))
+      .sort();
+    expect(noTenant).toEqual(
+      [
+        'POST auth/logout',
+        'POST auth/logout-all',
+        'POST auth/switch-tenant',
+        'GET me',
+        'GET me/memberships',
+        'GET me/sessions',
+        'DELETE me/sessions/:sessionId',
+        'POST me/password',
+      ].sort(),
+    );
+  });
+
+  it('invitation management requires members.invite', () => {
+    const invitation = discoverRoutes().filter((r) =>
+      r.route.includes('InvitationsController'),
+    );
+    expect(invitation).toHaveLength(2);
+    for (const route of invitation) {
+      expect(route.permissions).toEqual(['members.invite']);
+    }
   });
 
   describe('self-test', () => {

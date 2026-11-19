@@ -1,6 +1,8 @@
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import request from 'supertest';
 import type { PrismaClient } from '../src/generated/prisma/client.js';
+import { AUTHENTICATOR } from '../src/common/auth/authenticator.js';
+import { JwtAuthenticator } from '../src/modules/auth/jwt.authenticator.js';
 import { createTestApp } from './setup/create-test-app.js';
 import { createOwnerClient, resetTenancyData } from './support/db.js';
 import { bearer } from './support/test-authenticator.js';
@@ -58,15 +60,22 @@ describe('Guard chain and request context (e2e)', () => {
       await http().get('/api/health').expect(200);
     });
 
-    it('with the production binding (DenyAll) every non-public route is 401', async () => {
+    it('the production binding is JwtAuthenticator and refuses a credential it did not issue on every non-public route', async () => {
       const prod = await createTestApp({ productionAuthenticator: true });
       try {
-        const auth = aOwner();
+        expect(prod.get(AUTHENTICATOR)).toBeInstanceOf(JwtAuthenticator);
+        const auth = aOwner(); // a TestAuthenticator-style bearer, not a JWT
         for (const path of ['read', 'no-tenant', 'manage', 'undecorated']) {
           const res = await request(prod.getHttpServer())
             .get(`/api/v1/_tenant/${path}`)
             .set('Authorization', auth)
             .expect(401);
+          expectError(res.body, 401, 'UNAUTHENTICATED');
+        }
+        for (const path of ['read', 'no-tenant', 'manage', 'undecorated']) {
+          const res = await request(prod.getHttpServer())
+            .get(`/api/v1/_tenant/${path}`)
+            .expect(401); // no credential at all
           expectError(res.body, 401, 'UNAUTHENTICATED');
         }
         await request(prod.getHttpServer())
@@ -278,6 +287,7 @@ describe('Guard chain and request context (e2e)', () => {
       expect(res.body.data.permissions).toEqual([
         'branches.manage',
         'branches.read',
+        'members.invite',
         'tenant.read',
         'tenant.settings.manage',
       ]);

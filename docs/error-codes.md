@@ -46,10 +46,16 @@ Every non-2xx response uses one shape:
 | `TENANT_SUSPENDED` | 403 | This clinic's access is currently suspended. |
 | `TENANT_DEACTIVATED` | 403 | This clinic is no longer active. |
 | `TENANT_ACCESS_DENIED` | 403 | You do not have access to this clinic. |
+| `INVALID_CREDENTIALS` | 401 | The email or password is incorrect. |
+| `ACCESS_TOKEN_EXPIRED` | 401 | Your session needs to be refreshed. |
+| `TOKEN_INVALID` | 400 | This link is invalid or has expired. Please request a new one. |
+| `ROLE_NOT_ASSIGNABLE` | 422 | This role cannot be given through an invitation. |
+
+`INVALID_CREDENTIALS` is the single answer for an unknown email, a wrong password, and a `pending` or `deactivated` account, so responses never reveal which accounts exist. `ACCESS_TOKEN_EXPIRED` tells the client to call `POST /auth/refresh`; every other token failure is `UNAUTHENTICATED`. `TOKEN_INVALID` covers every emailed-link failure (unknown, expired, used, revoked or replaced token).
 
 ## Reserved codes
 
-Cataloged so the contract is stable. `CONFLICT` is produced by `TenantLifecycleService` for an invalid tenant status transition. `METHOD_NOT_ALLOWED` and `RATE_LIMITED` are only mapped from framework 405/429 exceptions (`to-api-error.ts`); nothing throws 429 until the Phase 3 throttler. `UNAUTHENTICATED` and `FORBIDDEN` are active since Phase 2, though in Phase 2 every protected route answers 401 because no real authenticator exists until Phase 3.
+Cataloged so the contract is stable. `CONFLICT` is produced by `TenantLifecycleService` (invalid tenant status transition) and by invitations (inviting someone who is already a member; resending an accepted or revoked invitation). `METHOD_NOT_ALLOWED` is only mapped from framework 405 exceptions (`to-api-error.ts`). `RATE_LIMITED` comes from the throttler (mapped from its 429) and from account lockout (a `DomainError`); both send a `Retry-After` header. `UNAUTHENTICATED` and `FORBIDDEN` are active since Phase 2.
 
 | Code | HTTP | Default message |
 |---|---|---|
@@ -69,3 +75,6 @@ Cataloged so the contract is stable. `CONFLICT` is produced by `TenantLifecycleS
 | `TOO_SHORT` | This value is too short. |
 | `TOO_LONG` | This value is too long. |
 | `UNKNOWN_FIELD` | This field is not accepted. |
+| `PASSWORD_TOO_COMMON` | This password is too easy to guess. Please choose another. |
+| `PASSWORD_CONTAINS_EMAIL` | The password must not contain your email address. |
+| `PASSWORD_INCORRECT` | The password is incorrect. |

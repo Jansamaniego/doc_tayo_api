@@ -88,6 +88,8 @@ docker compose ps                     # service status and health
 docker compose logs -f api            # API logs
 docker compose logs -f postgres       # database logs
 docker compose run --rm migrate       # apply migrations (run after first start and after pulling new ones)
+                                       # after ADDING a migration use `docker compose run --rm --build migrate`:
+                                       # `run` reuses the existing image, which would not contain the new file
 docker compose restart api            # restart without rebuilding
 docker compose up --build -d api      # rebuild and restart only the API
 docker compose down                   # stop and remove containers; DATABASE DATA IS KEPT
@@ -115,11 +117,13 @@ docker run -d --name doctayo-api -p 3000:3000 \
   -e NODE_ENV=production \
   -e DATABASE_URL='postgresql://doctayo_app:<secret>@<rds-endpoint>:5432/doc_tayo' \
   -e DATABASE_SSL=verify-full \
-  -e CORS_ALLOWED_ORIGINS=https://app.example.com \
+  -e CORS_ALLOWED_ORIGINS=https://app.example.com -e CORS_ALLOW_CREDENTIALS=true \
   -e OBSERVE_APP_KEY=... -e OBSERVE_APP_SECRET=... \
+  -e JWT_ACCESS_SECRET=... -e APP_PUBLIC_URL=https://app.example.com \
+  -e MAIL_TRANSPORT=smtp -e SMTP_URL=... -e MAIL_FROM='DocTayo <no-reply@example.com>' \
   doc-tayo-api
 ```
-Production requires TLS to the database (`DATABASE_SSL` of `require` or `verify-full`), `CORS_ALLOWED_ORIGINS` and Observe keys. `verify-full` validates the server certificate against Node's trusted CAs; if the provider uses its own CA (as RDS does), supply its bundle with Node's `NODE_EXTRA_CA_CERTS` environment variable and mount the file into the container. Run migrations as a separate step with the `migrate` image and `DATABASE_MIGRATION_URL` (owner role). The API never gets that URL.
+Production requires TLS to the database (`DATABASE_SSL` of `require` or `verify-full`), `CORS_ALLOWED_ORIGINS`, Observe keys, `JWT_ACCESS_SECRET` (at least 32 characters), `APP_PUBLIC_URL`, `MAIL_FROM` and `MAIL_TRANSPORT=smtp` with `SMTP_URL`; set `CORS_ALLOW_CREDENTIALS=true` for the refresh cookie. `verify-full` validates the server certificate against Node's trusted CAs; if the provider uses its own CA (as RDS does), supply its bundle with Node's `NODE_EXTRA_CA_CERTS` environment variable and mount the file into the container. Run migrations as a separate step with the `migrate` image and `DATABASE_MIGRATION_URL` (owner role). The API never gets that URL.
 
 ### Adding services later (e.g. Redis)
 

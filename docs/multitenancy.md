@@ -45,11 +45,11 @@ PostgreSQL RLS is deliberately not enabled yet (ADR-0010); the schema is RLS-rea
 
 ## Test harness
 
-`test/support/tenancy-fixtures.ts` seeds Clinic A, Clinic B and user M (owner in A, receptionist in B). `TestAuthenticator` (`test/support/`) authenticates `Authorization: Bearer test.<userId>.<tenantId|none>`; `createTestApp()` binds it automatically, `createTestApp({ productionAuthenticator: true })` keeps the production binding. Test-only controllers live in `test/support/` and are registered by `createTestApp`.
+`test/support/tenancy-fixtures.ts` seeds Clinic A, Clinic B and user M (owner in A, receptionist in B). `TestAuthenticator` (`test/support/`) authenticates `Authorization: Bearer test.<userId>.<tenantId|none>`; `createTestApp()` binds it automatically, `createTestApp({ productionAuthenticator: true })` keeps the production `JwtAuthenticator` (the auth suites sign in for real; see [authentication.md](authentication.md)). Test-only controllers live in `test/support/` and are registered by `createTestApp`.
 
-## Status in Phase 2
+## Status (Phase 3)
 
-There is **no login yet**: the production authenticator is `DenyAllAuthenticator`, so every non-public route answers `401` until Phase 3 binds the JWT authenticator. Onboarding and tenant lifecycle are services only (no HTTP endpoint until the platform-admin API in Phase 4). Users created by onboarding have status `pending` and cannot pass `TenantGuard` until Phase 3 activates them.
+Sign-in exists (`JwtAuthenticator`; the active tenant is stored on the session and changed with `POST /auth/switch-tenant`). Onboarding and tenant lifecycle are still services only (no HTTP endpoint until the platform-admin API in Phase 4). Users created by onboarding have status `pending` and cannot pass `TenantGuard` until they set a password through the emailed account-setup link; onboarding queues that email in the same transaction. Invitations (`invitations` is a tenant-owned registry model) are created through the tenant client; accepting one is the one public flow that writes a tenant-owned row, so it runs in `modules/auth` on the unscoped client and sets the tenant from the invitation row.
 
 ## Patient portal (planned)
 

@@ -152,7 +152,23 @@ export interface TenantModels {
   readonly role: TenantClient['role'];
   readonly rolePermission: TenantClient['rolePermission'];
   readonly membershipRole: TenantClient['membershipRole'];
+  readonly invitation: TenantClient['invitation'];
   readonly auditLog: TenantClient['auditLog'];
+}
+
+/**
+ * Opaque handle to a tenant transaction. Its only use is joining the
+ * transaction to the transactional outbox (`MailQueue.enqueue(tx.transaction,
+ * ...)`), so a message commits or rolls back with the tenant's own writes. It
+ * does not expose the Prisma client, so domain code still cannot run raw SQL.
+ */
+export interface TransactionHandle {
+  readonly __transactionHandle: never;
+}
+
+/** What a tenant `$transaction` callback receives. */
+export interface TenantTransaction extends TenantModels {
+  readonly transaction: TransactionHandle;
 }
 
 const pickModels = (client: TenantClient): TenantModels => ({
@@ -161,6 +177,7 @@ const pickModels = (client: TenantClient): TenantModels => ({
   role: client.role,
   rolePermission: client.rolePermission,
   membershipRole: client.membershipRole,
+  invitation: client.invitation,
   auditLog: client.auditLog,
 });
 
@@ -171,6 +188,7 @@ export class TenantPrismaService implements TenantModels {
   readonly role: TenantClient['role'];
   readonly rolePermission: TenantClient['rolePermission'];
   readonly membershipRole: TenantClient['membershipRole'];
+  readonly invitation: TenantClient['invitation'];
   readonly auditLog: TenantClient['auditLog'];
 
   private readonly client: TenantClient;
@@ -183,16 +201,21 @@ export class TenantPrismaService implements TenantModels {
     this.role = models.role;
     this.rolePermission = models.rolePermission;
     this.membershipRole = models.membershipRole;
+    this.invitation = models.invitation;
     this.auditLog = models.auditLog;
   }
 
-  /** Interactive transaction; the callback receives scoped delegates only. */
+  /** Interactive transaction; the callback receives scoped delegates (and an opaque outbox handle). */
   $transaction<T>(
-    fn: (tx: TenantModels) => Promise<T>,
+    fn: (tx: TenantTransaction) => Promise<T>,
     options?: { maxWait?: number; timeout?: number },
   ): Promise<T> {
     return this.client.$transaction(
-      (tx) => fn(pickModels(tx as TenantClient)),
+      (tx) =>
+        fn({
+          ...pickModels(tx as TenantClient),
+          transaction: tx as unknown as TransactionHandle,
+        }),
       options,
     );
   }

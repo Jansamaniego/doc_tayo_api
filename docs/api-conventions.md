@@ -1,6 +1,6 @@
 # API conventions
 
-Reference form of `plan.md` §7 for what exists through Phase 2.
+Reference form of `plan.md` §7 for what exists through Phase 3.
 
 - **Base path**: `/api`, URI versioning, default version `v1` → business routes are `/api/v1/<resource>`. Health is version-neutral: `/api/health`, `/api/health/ready`. Swagger UI: `/api/docs` (JSON: `/api/docs-json`), non-production only by default.
 - **Unmatched routes** anywhere return the standard error (`ROUTE_NOT_FOUND`).
@@ -9,8 +9,9 @@ Reference form of `plan.md` §7 for what exists through Phase 2.
 - **Success shapes**: controllers return explicit `{ data }` / `{ data, meta }` (`src/common/dto/api-response.ts`). There is no global response-wrapping interceptor (ADR-0005).
 - **Errors**: one shape for every failure, see [error-codes.md](error-codes.md). Services throw `DomainError(code)`; never put values (names, ids of people, query text) in error messages.
 - **Request id**: every response has `X-Request-Id`. A client-sent `X-Request-Id` is honored only if it is a canonical UUID; otherwise a new one is generated. The same id appears in the error body and the logs.
-- **Status codes**: 200/201/202/204 success; 400 validation or malformed; 401 not authenticated (in Phase 2 every protected route answers 401 until the Phase 3 authenticator exists); 403 not permitted or tenant not usable (`FORBIDDEN`, `TENANT_*`); 404 not found (also used for other tenants' records); 409 conflict; 413/415 body problems; 422 business rule; 429 reserved; 500/503 server.
-- **CORS**: exact-origin allow list from `CORS_ALLOWED_ORIGINS`; allowed headers `Content-Type, Authorization, X-Request-Id, Idempotency-Key`; `X-Request-Id` is exposed to browsers.
+- **Status codes**: 200/201/202/204 success; 400 validation or malformed; 401 not authenticated (`UNAUTHENTICATED`; `ACCESS_TOKEN_EXPIRED` tells the client to refresh; `INVALID_CREDENTIALS` for a failed login); 403 not permitted or tenant not usable (`FORBIDDEN`, `TENANT_*`); 404 not found (also used for other tenants' records); 409 conflict; 413/415 body problems; 422 business rule; 429 rate limited or account locked (`RATE_LIMITED`, with `Retry-After`); 500/503 server.
+- **Authentication**: `Authorization: Bearer <access token>` for every non-public route; the refresh token lives only in the httpOnly `dt_refresh` cookie (see [authentication.md](authentication.md)). Tokens are never accepted from a query string. `/api/v1/auth/*` and `/api/v1/me*` responses are `Cache-Control: no-store`.
+- **CORS**: exact-origin allow list from `CORS_ALLOWED_ORIGINS` (`CORS_ALLOW_CREDENTIALS=true` for the refresh cookie); allowed headers `Content-Type, Authorization, X-Request-Id, Idempotency-Key`; `X-Request-Id` is exposed to browsers.
 
 ## Adding an endpoint (checklist)
 

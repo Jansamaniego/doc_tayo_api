@@ -50,12 +50,18 @@ describe('AuthGuard', () => {
   });
 
   it('stores the user and requested tenant on success', async () => {
-    authenticate.mockResolvedValue({ userId: 'u1', activeTenantId: 't1' });
+    authenticate.mockResolvedValue({
+      userId: 'u1',
+      sessionId: 's1',
+      type: 'staff',
+      activeTenantId: 't1',
+    });
     await RequestContext.run({}, async () => {
       await expect(
         guard.canActivate(executionContextFor(Sample, 'secured')),
       ).resolves.toBe(true);
       expect(context.requireUser()).toBe('u1');
+      expect(context.sessionId).toBe('s1');
       expect(context.activeTenantId).toBe('t1');
     });
   });

@@ -18,10 +18,10 @@ interface TransitionRule {
  * enforces the new status on the next request.
  */
 const TRANSITIONS = {
-  suspend: { 
-    from: ['active'], 
-    to: 'suspended', 
-    action: 'tenant.suspended' 
+  suspend: {
+    from: ['active'],
+    to: 'suspended',
+    action: 'tenant.suspended',
   },
   reactivate: {
     from: ['suspended'],

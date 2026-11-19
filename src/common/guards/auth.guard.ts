@@ -32,6 +32,7 @@ export class AuthGuard implements CanActivate {
 
     this.context.set({
       userId: principal.userId,
+      sessionId: principal.sessionId,
       activeTenantId: principal.activeTenantId,
     });
     return true;

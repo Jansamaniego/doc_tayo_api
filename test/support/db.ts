@@ -23,6 +23,10 @@ export const createAppClient = () => makeClient(process.env.DATABASE_URL);
 
 const TENANCY_TABLES = [
   'audit_logs',
+  'refresh_tokens',
+  'sessions',
+  'user_tokens',
+  'invitations',
   'membership_roles',
   'role_permissions',
   'roles',
@@ -36,6 +40,10 @@ const TENANCY_TABLES = [
 export async function resetTenancyData(owner: PrismaClient): Promise<void> {
   await owner.$executeRawUnsafe(
     `TRUNCATE ${TENANCY_TABLES.join(', ')} RESTART IDENTITY CASCADE`,
+  );
+  // Queued mail must not leak from one test into the next one's delivery run.
+  await owner.$executeRawUnsafe(
+    `TRUNCATE nest_outbox.messages, nest_outbox.dead_letters, nest_outbox.inbox`,
   );
 }
 

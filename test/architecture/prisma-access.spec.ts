@@ -1,14 +1,21 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
 
-/** Modules allowed to use the unscoped PrismaService (plans/01-multitenancy.md §7.4). */
+/**
+ * Modules allowed to use the unscoped PrismaService (plans/01-multitenancy.md
+ * §7.4; Phase 3 adds auth, users, mail, maintenance: plans/02-authentication.md §11).
+ */
 const UNSCOPED_ALLOWED = new Set([
   'health',
   'tenancy',
   'tenants',
   'audit',
   'access-control',
-  // later phases: auth, users, admin
+  'auth',
+  'users',
+  'mail',
+  'maintenance',
+  // later phases: admin
 ]);
 
 interface SourceFile {
@@ -63,6 +70,21 @@ describe('architecture: Prisma access and test isolation', () => {
       path: relative(process.cwd(), p).split(sep).join('/'),
       content: readFileSync(p, 'utf8'),
     }));
+
+  it('the members module (invitations) uses only the tenant client', () => {
+    const members = files.filter((f) =>
+      f.path.startsWith('src/modules/members/'),
+    );
+    expect(members.length).toBeGreaterThan(0);
+    expect(unscopedPrismaViolations(members)).toEqual([]);
+  });
+
+  it('the Phase 2 deny-all authenticator is gone (JwtAuthenticator is the production binding)', () => {
+    expect(files.some((f) => f.path.includes('deny-all'))).toBe(false);
+    expect(files.some((f) => /DenyAllAuthenticator/.test(f.content))).toBe(
+      false,
+    );
+  });
 
   it('scans real source files', () => {
     expect(files.length).toBeGreaterThan(20);

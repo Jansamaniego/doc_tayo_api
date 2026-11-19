@@ -12,6 +12,7 @@ export const TENANT_OWNED_MODELS = [
   'Role',
   'RolePermission',
   'MembershipRole',
+  'Invitation',
 ] as const;
 
 /**

@@ -5,6 +5,7 @@ export interface ContextStore {
   requestId?: string;
   ip?: string;
   userId?: string;
+  sessionId?: string;
   /** Tenant the principal asked for (from the verified credential). */
   activeTenantId?: string | null;
   /** Set only after TenantGuard verified the membership. */
@@ -55,6 +56,9 @@ export class RequestContext {
   /** The authenticated user, or undefined outside an authenticated request. */
   get userIdOrUndefined(): string | undefined {
     return storage.getStore()?.userId;
+  }
+  get sessionId(): string | undefined {
+    return storage.getStore()?.sessionId;
   }
   get tenantId(): string | undefined {
     return storage.getStore()?.tenantId;

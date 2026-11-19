@@ -1,7 +1,7 @@
 # Plan 02 — Authentication (Master Plan Phase 3)
 
 > **Parent:** [`../plan.md`](../plan.md) (source of truth). This plan implements **Phase 3 — Authentication** only.
-> **Status:** **Draft for review. No implementation starts until the decisions in §16 are approved.**
+> **Status:** **Implemented (2026-11-19).** D1 and D3–D11 approved as recommended; D2 = httpOnly cookie (frontend and API share a site). Deviations from this plan are listed in §19 (As Built); where the body below differs from the code, §19 and the code win.
 > **Builds on:** [`00-project-foundation.md`](00-project-foundation.md) and [`01-multitenancy.md`](01-multitenancy.md) (both implemented).
 
 Statements marked **(verified)** were checked against the repository, the npm registry or docs.nestjs.com on 2026-11-19. Everything else is a design decision, or an assumption that the M1 spike must confirm.
@@ -45,10 +45,10 @@ Replace the fail-closed `DenyAllAuthenticator` with real, secure authentication,
 | `@nestjs/jwt` | 12.0.5 (peer `@nestjs/common` ^12) | **Adopt.** Signs and verifies HS256 access tokens. |
 | `@nestjs/throttler` | 6.8.0 (peers ^12) | **Adopt.** Login and recovery rate limits. In-memory storage (single instance). |
 | `@nestjs/schedule` | 12.0.4 | **Adopt.** Daily cleanup job. |
-| `argon2` | 0.45.2 | **Adopt** (master plan §8 item 1). Native module; M1 confirms the prebuilt binary loads in the Debian-slim image and in CI. |
-| `cookie-parser` | 1.4.7 | **Adopt only if D2 = cookie.** Reads the refresh cookie. |
-| `@nestjs/mail` | 0.0.2 | **Adopt, pinned exactly** (D4). SMTP and provider transports without SDKs; `InMemoryMailTransport` for tests and `FileMailTransport`/`LogMailTransport` for development (per its docs). |
-| `@nestjs/outbox` | 0.1.4 | **Adopt, pinned exactly** (D4). PostgreSQL store with a `fromPrisma` executor; `outbox.add(tx, message)` joins our transaction; at-least-once relay with retries (per its docs). |
+| `argon2` | 0.45.2 | **Adopted** (master plan §8 item 1). Native module: the prebuilt binary loads in the Debian-slim runtime image (verified, §17); its install script is disabled in `allowScripts` because the prebuild is used. |
+| `cookie-parser` | 1.4.7 | **Adopted** (D2 = cookie). Reads the refresh cookie. |
+| `@nestjs/mail` | 0.0.2 | **Adopted, pinned exactly** (D4). Wired transports: `smtp` (production), `log` and `file` (development), `memory` (tests). Its HTTP provider transports (Resend, Postmark, SendGrid, SES) exist but are not wired. |
+| `@nestjs/outbox` | 0.1.4 | **Adopted, pinned exactly** (D4). PostgreSQL store (`fromPrisma`, `migrate: false`); `outbox.add(tx, message)` joins our transaction; at-least-once relay with retries. |
 | `@nestjs/authentication` | 0.1.6 | **Do not adopt** (D1). See §16. |
 | `@nestjs/locks` | 0.0.6 | Not needed while single-instance (cleanup is idempotent). |
 
@@ -269,11 +269,11 @@ Field-level codes: `PASSWORD_TOO_COMMON`, `PASSWORD_INCORRECT`, `PASSWORD_CONTAI
 
 ### 8.4 Email delivery (D4)
 
-- `MailModule` with a transport chosen by `MAIL_TRANSPORT`: `log` (development default), `file` (development), `memory` (tests), `smtp`, or one provider transport once Q6 is answered. Production refuses `log`/`file`/`memory`.
-- Mail classes and templates: `invitation`, `account-setup`, `password-reset`, `password-changed`. Plain, short, large-text friendly; links built from `APP_PUBLIC_URL` with the token in the fragment (`/reset-password#token=…`).
+- `MailModule` with a transport chosen by `MAIL_TRANSPORT`: `log` (development default), `file` (development, `var/mail`), `memory` (tests), `smtp` (`SMTP_URL`). Production requires `smtp` (config validation refuses the others). An HTTP provider transport is added once Q6 is answered.
+- Mail classes: `invitation`, `account-setup`, `password-reset`, `password-changed`, `clinic-owner` (ownership notice for an owner who already has an account). Written inline in TypeScript with the `html` tagged template (auto-escaped), not as template files. Plain, short, large-text friendly; links built from `APP_PUBLIC_URL` with the token in the fragment (`/reset-password#token=…`).
 - **Never sent directly from a request.** Services call `outbox.add(tx, message)` inside their transaction; a local `@OnOutboxMessage()` handler renders and sends. At-least-once delivery: a duplicate email is acceptable; a lost one is not.
 - The relay runs inside the API process (single instance). `OUTBOX_RELAY=off` is available for later worker separation.
-- No PHI and no tokens in mail logs: the handler logs message id and type only.
+- No PHI and no tokens in mail logs: the handler logs message id and type only. The emailed token itself is part of the queued payload and is therefore stored in `nest_outbox.messages` (and in `dead_letters` after repeated failure) until delivered or purged; see §19.
 
 ### 8.5 Cleanup job (`@nestjs/schedule`)
 
@@ -327,24 +327,29 @@ Successful refreshes are not audited (volume). Failed logins for unknown emails 
 src/
   config/                      auth, mail namespaces in env.validation.ts / configuration.ts
   common/auth/                 authenticator.ts (Principal + sessionId, type); deny-all.authenticator.ts deleted
+  common/guards/               user-throttle.guard.ts (per-user route limit)
   common/security/             token.ts (random token + SHA-256), clock.ts (injectable clock for expiry tests)
   context/                     request-context.ts (+ sessionId)
   modules/
     auth/                      auth.controller.ts, login.service.ts, session.service.ts, refresh.service.ts,
                                password-recovery.service.ts, account-setup.service.ts,
                                invitation-acceptance.service.ts, jwt.authenticator.ts,
-                               password-hasher.ts, password-policy.ts, common-passwords.txt,
+                               access-token.service.ts, auth-cookie.service.ts, auth-throttle.ts,
+                               invitation-acceptance.controller.ts, password-change.service.ts,
+                               password-validation.ts, switch-tenant.service.ts, user-token.service.ts,
+                               password-hasher.ts, password-policy.ts, common-passwords.ts,
                                lockout.ts, auth.module.ts, dto/
     users/                     me.controller.ts, me.service.ts, users.module.ts, dto/
     members/                   invitations.controller.ts, invitations.service.ts, members.module.ts, dto/
-    mail/                      mail.module.ts, mails/*.ts, templates/*, outbox handler
-    maintenance/               cleanup.job.ts
-    tenancy/                   tenancy.module.ts (ThrottlerGuard first; JwtAuthenticator binding)
+    mail/                      mail.module.ts, mail-queue.service.ts, mail-outbox.handler.ts, mails/{emails,layout}.ts
+    maintenance/               cleanup.service.ts, cleanup.job.ts, maintenance.module.ts
+    tenancy/                   tenancy.module.ts (ThrottlerGuard first), tenant-access.ts (the shared access rule), user-memberships.service.ts
     tenants/                   tenant-onboarding.service.ts (+ account setup token and email)
     access-control/            catalog.ts (+ members.invite)
 prisma/schema/                 identity.prisma (users columns, sessions, refresh_tokens, user_tokens), tenancy.prisma (invitations)
 prisma/migrations/             <ts>_authentication/ (+ outbox SQL, partial unique index, members.invite insert and grants)
-test/support/                  auth helpers: createActiveUser(password), login(), authHeader(); mail inbox helper
+test/support/                  auth.ts (createActiveUser, setPasswords, seedMembership, cookie helpers), mail.ts (mailbox, deliverMail,
+                               tokenFromLink), test-clock.ts, resettable-throttler-storage.ts
 docs/                          authentication.md (new); environment, error-codes, authorization, multitenancy,
                                architecture, security-privacy, database (updated)
 docs/adr/                      0011-authentication-without-nestjs-authentication.md, 0012-refresh-token-transport.md,
@@ -364,10 +369,13 @@ docs/adr/                      0011-authentication-without-nestjs-authentication
 | `SESSION_IDLE_TTL` | no | `14d` | |
 | `SESSION_ABSOLUTE_TTL` | no | `30d` | Must be ≥ idle TTL. |
 | `APP_PUBLIC_URL` | **yes in production** | `http://localhost:5173` outside production | Frontend base URL for emailed links. |
-| `MAIL_TRANSPORT` | no | `log` (dev), `memory` (test) | `smtp` or a provider in production. |
-| `MAIL_FROM` | **yes in production** | — | |
-| `SMTP_URL` / provider key | when that transport is chosen | — | Exact variables depend on Q6. |
-| `AUTH_REFRESH_COOKIE` | no | `true` | Only if D2 keeps both modes switchable; otherwise omitted. |
+| `MAIL_TRANSPORT` | no | `log` (dev), `memory` (test) | `log` \| `file` \| `memory` \| `smtp`. Production requires `smtp`. |
+| `MAIL_FROM` | **yes in production** | `DocTayo <no-reply@doctayo.local>` outside production | |
+| `SMTP_URL` | when `MAIL_TRANSPORT=smtp` | — | e.g. `smtps://user:password@host:465`. A provider transport and its key are added after Q6. |
+| `OUTBOX_RELAY` | no | `on` | `off` = this process does not deliver queued mail (tests use it and drive delivery explicitly). |
+| `ARGON2_MEMORY_KIB`, `ARGON2_TIME_COST`, `ARGON2_PARALLELISM` | no | `19456`, `2`, `1` | Production refuses values below these. Tests lower them for speed. |
+
+`AUTH_REFRESH_COOKIE` was dropped: D2 chose the cookie, so there is no second mode to switch to.
 
 Each variable is validated in `env.validation.ts` and documented in `docs/environment.md` and `.env.example`; Compose passes the development values.
 
@@ -405,7 +413,7 @@ All database behavior is tested against the real `doc_tayo_test` PostgreSQL. New
 - 10 failed attempts → `locked_until` set; locked login with the correct password → the same 429; successful login after expiry resets the counter.
 - Login rehashes a hash created with older parameters.
 
-### 13.5 Switch tenant and `/me` (`test/auth-tenancy.e2e-spec.ts`)
+### 13.5 Switch tenant and `/me` (`test/auth-endpoints.e2e-spec.ts`, `test/auth-me.e2e-spec.ts`)
 - User M (member of Clinic A and Clinic B): switch to B → the next request sees B's data with B's permissions; A's permissions do not carry over (master plan §11.5).
 - Switch to a tenant without membership → `403 TENANT_ACCESS_DENIED`; suspended tenant → `403 TENANT_SUSPENDED`.
 - Membership removed while the access token is valid → next tenant request `403`.
@@ -445,18 +453,18 @@ All database behavior is tested against the real `doc_tayo_test` PostgreSQL. New
 
 | # | Milestone | Done when |
 |---|---|---|
-| M0 | Approvals (§16) | Decisions recorded in this file |
-| M1 | **Spike** (scratch, not committed): `argon2` loads in the Debian-slim image and CI; `@nestjs/outbox` `fromPrisma` with the Prisma 7 pg adapter inside an interactive transaction, including the tenant client's `$transaction`; outbox SQL fits in a Prisma migration and works for the runtime role; `@nestjs/mail` in-memory transport in Vitest; `@nestjs/throttler` v6 as the first `APP_GUARD` with per-route trackers; ESM imports for every new package | Findings in §17; plan adjusted if an assumption fails |
-| M2 | Schema + migration (+ outbox SQL, partial unique index, `members.invite`) | §13.1 green; `migrate deploy` locally and in Docker |
-| M3 | Password hasher + policy + common-password list | §13.2 green |
-| M4 | Session, refresh-token and access-token services; `JwtAuthenticator`; `Principal`/context changes | §13.3 green (except cookie cases, which land with M5) |
-| M5 | Auth controller: login, refresh, logout, logout-all, switch-tenant; cookie handling; throttler and lockout | §13.3, §13.4, §13.5 green |
-| M6 | `/me` endpoints | §13.5 green |
-| M7 | Mail module + outbox + forgot/reset + change password + account setup (onboarding change) | §13.6 green |
-| M8 | Invitations (create, resend, accept) | §13.7 green |
-| M9 | Cleanup job | Unit test with the clock; e2e run of the job against seeded expired rows |
-| M10 | Security/hygiene suite, architecture updates | §13.8, §13.9 green |
-| M11 | Docs + ADRs 0011–0013 + env docs; plan sync (master plan and this file's "As Built") | Lint, format, typecheck, unit, e2e, Docker build all green |
+| M0 ✅ | Approvals (§16) | Decisions recorded in this file |
+| M1 ✅ | **Spike** (scratch, not committed): `argon2` loads in the Debian-slim image and CI; `@nestjs/outbox` `fromPrisma` with the Prisma 7 pg adapter inside an interactive transaction, including the tenant client's `$transaction`; outbox SQL fits in a Prisma migration and works for the runtime role; `@nestjs/mail` in-memory transport in Vitest; `@nestjs/throttler` v6 as the first `APP_GUARD` with per-route trackers; ESM imports for every new package | Findings in §17; plan adjusted if an assumption fails |
+| M2 ✅ | Schema + migration (+ outbox SQL, partial unique index, `members.invite`) | §13.1 green; `migrate deploy` locally and in Docker |
+| M3 ✅ | Password hasher + policy + common-password list | §13.2 green |
+| M4 ✅ | Session, refresh-token and access-token services; `JwtAuthenticator`; `Principal`/context changes | §13.3 green (except cookie cases, which land with M5) |
+| M5 ✅ | Auth controller: login, refresh, logout, logout-all, switch-tenant; cookie handling; throttler and lockout | §13.3, §13.4, §13.5 green |
+| M6 ✅ | `/me` endpoints | §13.5 green |
+| M7 ✅ | Mail module + outbox + forgot/reset + change password + account setup (onboarding change) | §13.6 green |
+| M8 ✅ | Invitations (create, resend, accept) | §13.7 green |
+| M9 ✅ | Cleanup job | Unit test with the clock; e2e run of the job against seeded expired rows |
+| M10 ✅ | Security/hygiene suite, architecture updates | §13.8, §13.9 green |
+| M11 ✅ | Docs + ADRs 0011–0013 + env docs; plan sync (master plan and this file's "As Built") | Lint, format, typecheck, unit, e2e, Docker build all green |
 
 ---
 
@@ -487,15 +495,27 @@ All database behavior is tested against the real `doc_tayo_test` PostgreSQL. New
 
 ---
 
-## 17. Spike Findings (filled in after M1)
+## 17. Spike Findings (M1, 2026-11-19)
 
-_Not run yet._
+Scratch test, deleted after the run. Results:
+
+| Assumption | Result |
+|---|---|
+| `argon2` 0.45.2 loads and hashes (`argon2id`, `needsRehash`) on Linux x64 | **Confirmed**, locally and in the Debian-slim `runtime` Docker image with the production parameters (`m=19456,t=2,p=1`): the prebuilt binary is used and the install script is not needed (disabled in `allowScripts`). The GitHub Actions run was not executed. |
+| `@nestjs/outbox` `fromPrisma(prisma)` works with our `PrismaService` (Prisma 7.10.1, pg adapter) | **Confirmed.** `outbox.add(tx, msg)` inside `prisma.$transaction` commits with the transaction; a rolled-back transaction produces no message. |
+| `outbox.add` works with the **tenant-extended** client's transaction | **Confirmed**, when given the extended transaction client itself. `TenantPrismaService.$transaction` only hands out picked delegates, so it needs a small addition (M8). |
+| The outbox SQL fits a Prisma migration; runtime role needs DML only | **Confirmed.** The store lives in its own schema `nest_outbox` (not `public`), so our default privileges do not cover it: the migration adds `GRANT USAGE` on the schema, DML on its tables and sequences, and `ALTER DEFAULT PRIVILEGES` for later outbox migrations. The store runs with `migrate: false`. |
+| `@nestjs/mail` `InMemoryMailTransport` + `Mailer.send` in Vitest | **Confirmed.** Tests drive delivery with `OutboxRelay.runOnce()` (relay disabled in tests). |
+| ESM imports for every new package | **Confirmed** (`@nestjs/outbox`, `/postgres`, `@nestjs/mail` import with `.js` project style). |
+| `@nestjs/throttler` v6 as first `APP_GUARD` with per-route trackers | **Confirmed in M5.** v6.8 supports `getTracker` per route and several named throttlers; the throttler's windows use real time, not our injectable clock. The throttler's storage keeps its hit timestamps in two maps, so test resets must clear both (`test/support/resettable-throttler-storage.ts`). |
+
+Other findings: `@nestjs/outbox` pulls in `@nestjs/store-kit` (dependency). Both 0.x packages are pinned exactly in `package.json`.
 
 ---
 
-## 18. Deviations from the Master Plan (to be applied to `plan.md` on approval)
+## 18. Deviations from the Master Plan (applied to `plan.md` on 2026-11-19)
 
-| # | Master plan says | This plan proposes | Why |
+| # | Master plan said | Built | Why |
 |---|---|---|---|
 | 1 | Access token claim `tid` (§4.2, §3.3) | No `tid`; the active tenant is `sessions.active_tenant_id`, read by the authenticator | D5: one source of truth, immediate switch, no stale tenant in tokens |
 | 2 | Session check "combined with the membership query" (§4.2) | Separate indexed session query in the authenticator; `TenantGuard` keeps its own query | The session check is also needed on `@TenantNotRequired()` routes, which have no membership query. Two indexed lookups per tenant request; measured in Phase 7. |
@@ -509,4 +529,35 @@ _Not run yet._
 
 ## 19. As Built
 
-_Filled in during and after implementation, per CLAUDE.md "Plans and Docs Stay Aligned With the Code"._
+Implemented on 2026-11-19. Verified with: `npx tsc --noEmit`, `oxlint --type-aware`, `prettier --check`, the unit/architecture suite and the full e2e suite against the real `doc_tayo_test` PostgreSQL (counts are in the final report), plus Docker: both images build, `migrate` applied the migration to the Compose database, the API container booted, answered health and auth requests, and hashed with `argon2` in the Debian-slim image.
+
+### Deviations from the plan (all intentional)
+
+| # | Plan said | Built | Why |
+|---|---|---|---|
+| 1 | Common-password list: bundle SecLists top 10,000 | `common-passwords.ts`: the 9,126 entries of 10+ characters (deduplicated, NFKC lower-case) from the NCSC "100k most used passwords" list as redistributed by SecLists (MIT) | The top-10k list has only 51 passwords of 10+ characters, and the minimum length is 10, so it would block almost nothing. Same licence, same "no data leaves the server". A TypeScript module instead of a `.txt` asset avoids copying assets in the build. |
+| 2 | Password must not contain the email local part | Only a local part of 4+ characters is checked (and the whole address always is) | A 2-character local part ("jo") would reject ordinary passwords. |
+| 3 | Mail templates as files in `mails/*.ts` + `templates/*` | Inline TypeScript with the `html` tagged template (`mails/emails.ts`, `mails/layout.ts`) | Auto-escaped, typed, nothing to copy at build time, and the five mails are short. |
+| 4 | Four emails | Five: `clinic_owner` (ownership notice) | §8.3 required telling an owner who already has an account that they now own a clinic. |
+| 5 | Lockout "after 10 consecutive failures" | The counter is **not** reset when the lock expires, so the next failure locks again; only a success, password reset or account setup clears it | Stricter against slow guessing; the lock is short (15 min) so the denial-of-service risk is bounded. |
+| 6 | Throttler "first `APP_GUARD`" with a per-user limit for `POST /me/password` | The throttler is first, but the per-user limit is a route guard (`UserThrottleGuard`, `common/guards`), because the throttler runs before authentication and cannot know the user. A named throttler `ip15` + `@IpLimited()` provides login's second (per-IP) limit. `ThrottlerModule` is re-exported by `TenancyModule` so both guards share one counter store. | Authentication order. |
+| 7 | Reset/setup/accept/change responses unspecified | `forgot` → `202 { data: { accepted: true } }`; `reset`, `account/setup`, `invitations/accept`, `POST /me/password`, `logout`, `logout-all`, `DELETE /me/sessions/:id` → `204`; `resend` → `200` | Consistent and simple for the client. |
+| 8 | (not specified) | `Cache-Control: no-store` on every `/api/v1/auth/*` and `/api/v1/me*` response (middleware in `app.setup.ts`) | Responses carry access tokens or account data and must never be cached by a browser or proxy. |
+| 9 | The emailed token is only "enqueued" | The raw token is part of the outbox message payload, so it sits in `nest_outbox.messages` until delivered and in `dead_letters` if delivery keeps failing. The cleanup job purges dead letters after 14 days. | The token is needed to build the link when the relay sends the email; hashing it first would make the link impossible to rebuild. Accepted risk: anyone who can read the database could use an undelivered link. Mitigated by 30-minute/7-day expiry, single use, and the purge. |
+| 10 | `TenantPrismaService.$transaction` unchanged | The callback now receives a `TenantTransaction`: the scoped delegates plus an opaque `transaction` handle used only to join the outbox. `TenantModels` gains the `invitation` delegate. | `members` may only use the tenant client but must queue the invitation email in the same transaction. The handle does not expose the Prisma client. |
+| 11 | `TenantGuard` unchanged except rejecting non-staff principals | The access rule moved to `tenancy/tenant-access.ts` (`tenantAccessError`) and is used by `TenantGuard` and switch-tenant. No runtime non-staff check was added because `Principal.type` can only be `staff`. | One rule in one place, so switch-tenant and the guard cannot drift. The check is added with the first non-staff principal. |
+| 12 | `UserMembershipsService` not planned | Added in `modules/tenancy` (unscoped, global identity data) for the login response and `GET /me/memberships` | Shared by `auth` and `users`. |
+| 13 | `POST /auth/refresh` accepts request metadata | `RefreshService.rotate(token, meta)` keeps the parameter but ignores it; user agent and IP are recorded at login only | Not required by the plan; the parameter is kept for a later "last seen device" feature. |
+| 14 | Refresh-token body mode as a switchable alternative | Not built; `AUTH_REFRESH_COOKIE` does not exist | D2 chose the cookie. Moving to the body later changes `AuthController` and `AuthCookieService` only. |
+| 15 | `ThrottlerGuard` on health | Health is `@SkipThrottle({ default: true })` | Probes must never be rate limited. |
+
+### Test files
+
+`auth-schema`, `auth-sessions`, `auth-login`, `auth-endpoints` (cookie, refresh, logout, switch-tenant, isolation with real tokens), `auth-me`, `auth-password` (forgot/reset/change/account setup), `invitations`, `cleanup`, `auth-security` (log hygiene, strict input, rollback atomicity, caching) and additions to `route-registry`, `tenancy-guards`, `architecture/prisma-access` and the unit specs (`env.validation`, `password-hasher`, `password-policy`, `error-codes`, `auth.guard`). `plans §13.5` ("auth-tenancy") is covered by `auth-endpoints` and `auth-me`.
+
+### Known limits (not bugs)
+
+- Throttle counters are in memory: they reset on restart and are per process (D8, single instance).
+- A `forgot` request for an existing account does slightly more work than one for an unknown account (a transaction); this is not equalised.
+- Without a production email provider (Q6) the system cannot go live: only SMTP is wired.
+- `GET /me` reports permissions in the active tenant only when the membership is currently active; the access token itself never carries them.

@@ -34,6 +34,9 @@ export class PrismaService
         },
         { schema: db.schema },
       ),
+      // The password hash never leaves the database unless code asks for it
+      // with an explicit `select` (credentials code only).
+      omit: { user: { passwordHash: true } },
       // Never log queries (parameters can contain patient data).
       log: [
         { emit: 'event', level: 'warn' },

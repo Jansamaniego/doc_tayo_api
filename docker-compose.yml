@@ -59,6 +59,11 @@ services:
       LOG_LEVEL: log
       SWAGGER_ENABLED: 'true'
       OBSERVE_ENABLED: 'false'
+      # Development-only secret (never reuse outside this Compose file).
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-dev-only-jwt-secret-change-me-0123456789abcdef}
+      APP_PUBLIC_URL: ${APP_PUBLIC_URL:-http://localhost:5173}
+      MAIL_TRANSPORT: log
+      CORS_ALLOW_CREDENTIALS: ${CORS_ALLOW_CREDENTIALS:-true}
 
   # One-off job (never runs on `up`): docker compose run --rm migrate
   # Uses the owner role, which the api service never receives.

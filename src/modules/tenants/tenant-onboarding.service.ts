@@ -5,11 +5,17 @@ import {
   type FieldError,
   type FieldErrorCode,
 } from '../../common/errors/error-codes.js';
+import { normalizeEmail } from '../../common/validation/email.js';
 import { isValidTimeZone } from '../../common/validation/timezone.js';
 import { Prisma } from '../../generated/prisma/client.js';
 import { PrismaService } from '../../prisma/prisma.service.js';
 import { ROLE_TEMPLATES } from '../access-control/catalog.js';
 import { AuditService } from '../audit/audit.service.js';
+import {
+  ACCOUNT_SETUP_TTL_MS,
+  UserTokenService,
+} from '../auth/user-token.service.js';
+import { MailQueue } from '../mail/mail-queue.service.js';
 
 export interface OnboardTenantInput {
   name: string;
@@ -36,9 +42,6 @@ export interface OnboardTenantResult {
 const SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const DEFAULT_TIMEZONE = 'Asia/Manila';
-
-export const normalizeEmail = (email: string): string =>
-  email.trim().toLowerCase();
 
 function problem(field: string, code: FieldErrorCode): FieldError {
   return { field, code, message: FIELD_ERROR_CODES[code] };
@@ -81,6 +84,8 @@ export class TenantOnboardingService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    private readonly tokens: UserTokenService,
+    private readonly mail: MailQueue,
   ) {}
 
   /**
@@ -99,7 +104,7 @@ export class TenantOnboardingService {
     const email = normalizeEmail(input.ownerEmail);
 
     try {
-      return await this.prisma.$transaction(async (tx) => {
+      const result = await this.prisma.$transaction(async (tx) => {
         // An existing human keeps their account untouched (global identity).
         const user = await tx.user.upsert({
           where: { email },
@@ -181,6 +186,29 @@ export class TenantOnboardingService {
           actorMembershipId: null,
         });
 
+        // Same transaction as the clinic: the email exists only if the clinic does.
+        const clinicName = input.name.trim();
+        if (user.status === 'pending') {
+          const token = await this.tokens.issue(
+            tx,
+            user.id,
+            'account_setup',
+            ACCOUNT_SETUP_TTL_MS,
+          );
+          await this.mail.enqueue(tx, 'account_setup', {
+            to: user.email,
+            token,
+            clinicName,
+            fullName: user.fullName,
+          });
+        } else {
+          await this.mail.enqueue(tx, 'clinic_owner', {
+            to: user.email,
+            clinicName,
+            fullName: user.fullName,
+          });
+        }
+
         return {
           tenantId: tenant.id,
           branchId: branch.id,
@@ -188,6 +216,8 @@ export class TenantOnboardingService {
           ownerMembershipId: membership.id,
         };
       });
+      this.mail.notify(); // committed: deliver now instead of at the next poll
+      return result;
     } catch (error) {
       if (
         error instanceof Prisma.PrismaClientKnownRequestError &&

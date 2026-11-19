@@ -45,6 +45,10 @@ jobs:
       LOG_FORMAT: json
       SWAGGER_ENABLED: 'true'
       OBSERVE_ENABLED: 'false'
+      JWT_ACCESS_SECRET: ci-only-jwt-secret-0123456789-abcdefghijklmnop
+      ARGON2_MEMORY_KIB: '1024'
+      ARGON2_TIME_COST: '1'
+      OUTBOX_RELAY: 'off'
 
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0

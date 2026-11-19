@@ -15,6 +15,8 @@ export const corsConfig = registerAs('cors', () => read().cors);
 export const loggingConfig = registerAs('logging', () => read().logging);
 export const swaggerConfig = registerAs('swagger', () => read().swagger);
 export const observeConfig = registerAs('observe', () => read().observe);
+export const authConfig = registerAs('auth', () => read().auth);
+export const mailConfig = registerAs('mail', () => read().mail);
 
 export const configNamespaces = [
   appConfig,
@@ -23,4 +25,6 @@ export const configNamespaces = [
   loggingConfig,
   swaggerConfig,
   observeConfig,
+  authConfig,
+  mailConfig,
 ];

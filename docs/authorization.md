@@ -1,4 +1,4 @@
-# Authorization (Phase 2 foundation)
+# Authorization
 
 Roles and permissions attach to the **tenant membership**. Permissions are defined in code; roles are tenant-owned.
 
@@ -8,13 +8,13 @@ Every route is exactly one of (enforced by `test/route-registry.e2e-spec.ts`):
 
 | Category | Decorator | Guards applied |
 |---|---|---|
-| Public | `@Public()` | none (health, docs) |
-| Authenticated, no tenant | `@TenantNotRequired()` | `AuthGuard` (e.g. `/me`, switch-tenant in Phase 3) |
+| Public | `@Public()` | none (health, docs, login, refresh, password recovery, account setup, invitation acceptance); the list is pinned by `test/route-registry.e2e-spec.ts` |
+| Authenticated, no tenant | `@TenantNotRequired()` | `AuthGuard` (`/me*`, `/auth/switch-tenant`, `/auth/logout`) |
 | Tenant-scoped (default) | `@RequirePermissions('a.b', ...)` | `AuthGuard`, `TenantGuard`, `PermissionsGuard` |
 
 A tenant-scoped route **without** `@RequirePermissions` is denied (`403 FORBIDDEN`): deny by default. Every listed permission is required.
 
-## Phase 2 catalog and role templates
+## Catalog and role templates
 
 Source of truth: `src/modules/access-control/catalog.ts`.
 
@@ -24,6 +24,7 @@ Source of truth: `src/modules/access-control/catalog.ts`.
 | `tenant.settings.manage` | yes | yes | | | |
 | `branches.read` | yes | yes | yes | yes | yes |
 | `branches.manage` | yes | yes | | | |
+| `members.invite` | yes | yes | | | |
 
 Onboarding materializes the five system roles (`is_system = true`) per tenant from these templates. Custom-role editing is a later phase.
 

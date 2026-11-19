@@ -8,6 +8,7 @@ export const PERMISSIONS = {
   TENANT_SETTINGS_MANAGE: 'tenant.settings.manage',
   BRANCHES_READ: 'branches.read',
   BRANCHES_MANAGE: 'branches.manage',
+  MEMBERS_INVITE: 'members.invite',
 } as const;
 
 export type PermissionKey = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
@@ -20,6 +21,7 @@ export const PERMISSION_DESCRIPTIONS: Record<PermissionKey, string> = {
   'tenant.settings.manage': 'Edit clinic settings',
   'branches.read': 'View branches',
   'branches.manage': 'Create and edit branches',
+  'members.invite': 'Invite staff to the clinic',
 };
 
 export interface RoleTemplate {

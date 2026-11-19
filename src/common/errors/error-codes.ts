@@ -82,6 +82,23 @@ export const ERROR_CODES = {
     status: HttpStatus.FORBIDDEN,
     message: 'You do not have access to this clinic.',
   },
+  // --- Active in Phase 3 (authentication) ---
+  INVALID_CREDENTIALS: {
+    status: HttpStatus.UNAUTHORIZED,
+    message: 'The email or password is incorrect.',
+  },
+  ACCESS_TOKEN_EXPIRED: {
+    status: HttpStatus.UNAUTHORIZED,
+    message: 'Your session needs to be refreshed.',
+  },
+  TOKEN_INVALID: {
+    status: HttpStatus.BAD_REQUEST,
+    message: 'This link is invalid or has expired. Please request a new one.',
+  },
+  ROLE_NOT_ASSIGNABLE: {
+    status: HttpStatus.UNPROCESSABLE_ENTITY,
+    message: 'This role cannot be given through an invitation.',
+  },
   // --- Reserved: cataloged now so the contract is stable; no producer yet ---
   CONFLICT: {
     status: HttpStatus.CONFLICT,
@@ -109,6 +126,10 @@ export const FIELD_ERROR_CODES = {
   TOO_SHORT: 'This value is too short.',
   TOO_LONG: 'This value is too long.',
   UNKNOWN_FIELD: 'This field is not accepted.',
+  PASSWORD_TOO_COMMON:
+    'This password is too easy to guess. Please choose another.',
+  PASSWORD_CONTAINS_EMAIL: 'The password must not contain your email address.',
+  PASSWORD_INCORRECT: 'The password is incorrect.',
 } as const;
 
 export type FieldErrorCode = keyof typeof FIELD_ERROR_CODES;

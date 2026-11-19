@@ -10,6 +10,7 @@ import { TENANT_NOT_REQUIRED_KEY } from '../../common/decorators/tenant-not-requ
 import { DomainError } from '../../common/errors/domain-error.js';
 import { RequestContext } from '../../context/request-context.js';
 import { MembershipResolver } from './membership-resolver.js';
+import { tenantAccessError } from './tenant-access.js';
 
 /**
  * Turns the tenant the credential asks for into a VERIFIED tenant: the user
@@ -46,11 +47,8 @@ export class TenantGuard implements CanActivate {
     const userId = this.context.requireUser();
 
     const membership = await this.resolver.resolve(tenantId, userId);
-    if (
-      !membership ||
-      membership.userStatus !== 'active' ||
-      membership.membershipStatus !== 'active'
-    ) {
+    const denial = tenantAccessError(membership);
+    if (denial === 'TENANT_ACCESS_DENIED') {
       // Security event: ids only, never request data.
       this.logger.warn({
         message: 'tenant access denied',
@@ -58,15 +56,9 @@ export class TenantGuard implements CanActivate {
         userId,
         tenantId,
       });
-      throw new DomainError('TENANT_ACCESS_DENIED');
     }
-    // Only active members may learn the tenant's state.
-    if (membership.tenantStatus === 'suspended') {
-      throw new DomainError('TENANT_SUSPENDED');
-    }
-    if (membership.tenantStatus === 'deactivated') {
-      throw new DomainError('TENANT_DEACTIVATED');
-    }
+    if (denial || !membership)
+      throw new DomainError(denial ?? 'TENANT_ACCESS_DENIED');
 
     this.context.set({
       tenantId,

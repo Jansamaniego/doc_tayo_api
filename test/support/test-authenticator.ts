@@ -5,6 +5,9 @@ import type {
   Principal,
 } from '../../src/common/auth/authenticator.js';
 
+/** Fixed id: TestAuthenticator principals have no real session row. */
+export const TEST_SESSION_ID = '00000000-0000-4000-8000-0000000000ff';
+
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
@@ -22,6 +25,8 @@ export class TestAuthenticator implements Authenticator {
     if (tenant !== 'none' && !UUID.test(tenant)) return Promise.resolve(null);
     return Promise.resolve({
       userId,
+      sessionId: TEST_SESSION_ID,
+      type: 'staff',
       activeTenantId: tenant === 'none' ? null : tenant,
     });
   }

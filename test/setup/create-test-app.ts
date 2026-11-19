@@ -1,11 +1,15 @@
 import type { INestApplication, Type } from '@nestjs/common';
 import type { NestExpressApplication } from '@nestjs/platform-express';
+import { InMemoryMailTransport, MailTransport } from '@nestjs/mail';
+import { ThrottlerStorage } from '@nestjs/throttler';
 import { Test } from '@nestjs/testing';
 import { TestController } from '../support/test.controller.js';
 import { TenantTestController } from '../support/tenant-test.controller.js';
+import { ResettableThrottlerStorage } from '../support/resettable-throttler-storage.js';
 import { TestAuthenticator } from '../support/test-authenticator.js';
 import { AUTHENTICATOR } from '../../src/common/auth/authenticator.js';
 import { AppModule } from '../../src/app.module.js';
+import { Clock } from '../../src/common/security/clock.js';
 import { applyAppSetup, applyPostInit } from '../../src/app.setup.js';
 
 interface Options {
@@ -13,8 +17,10 @@ interface Options {
   env?: Record<string, string | undefined>;
   /** Test-only controllers (never imported by src/). */
   controllers?: Type<unknown>[];
-  /** Keep the production authenticator (DenyAll) instead of TestAuthenticator. */
+  /** Keep the production authenticator (JwtAuthenticator) instead of TestAuthenticator. */
   productionAuthenticator?: boolean;
+  /** Replaces the system clock (expiry tests move time instead of sleeping). */
+  clock?: Clock;
 }
 
 /** Builds the real AppModule configured by the real applyAppSetup. */
@@ -39,6 +45,12 @@ export async function createTestApp(
     if (!options.productionAuthenticator) {
       builder.overrideProvider(AUTHENTICATOR).useClass(TestAuthenticator);
     }
+    builder
+      .overrideProvider(MailTransport)
+      .useValue(new InMemoryMailTransport())
+      .overrideProvider(ThrottlerStorage)
+      .useValue(new ResettableThrottlerStorage());
+    if (options.clock) builder.overrideProvider(Clock).useValue(options.clock);
     const moduleRef = await builder.compile();
     const app = moduleRef.createNestApplication<NestExpressApplication>();
     applyAppSetup(app);

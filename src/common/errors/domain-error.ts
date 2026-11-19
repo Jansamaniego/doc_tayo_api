@@ -10,7 +10,12 @@ export class DomainError extends Error {
 
   constructor(
     readonly code: ErrorCode,
-    readonly options: { message?: string; details?: FieldError[] } = {},
+    readonly options: {
+      message?: string;
+      details?: FieldError[];
+      /** Sent as the `Retry-After` header (seconds), e.g. for account lockout. */
+      retryAfterSeconds?: number;
+    } = {},
   ) {
     super(options.message ?? ERROR_CODES[code].message);
     this.name = 'DomainError';

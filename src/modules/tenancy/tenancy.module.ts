@@ -6,34 +6,46 @@ import {
   RequestMethod,
 } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
-import { AUTHENTICATOR } from '../../common/auth/authenticator.js';
-import { DenyAllAuthenticator } from '../../common/auth/deny-all.authenticator.js';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { AuthGuard } from '../../common/guards/auth.guard.js';
 import { PermissionsGuard } from '../../common/guards/permissions.guard.js';
 import { requestContextMiddleware } from '../../context/request-context.middleware.js';
 import { RequestContext } from '../../context/request-context.js';
+import { AuthModule } from '../auth/auth.module.js';
+import { throttlerOptions } from '../auth/auth-throttle.js';
 import {
   MembershipResolver,
   PrismaMembershipResolver,
 } from './membership-resolver.js';
 import { TenantGuard } from './tenant.guard.js';
+import { UserMembershipsService } from './user-memberships.service.js';
 
 /**
  * Request context + the global guard chain. APP_GUARD providers run in the
  * order they are declared: AuthGuard -> TenantGuard -> PermissionsGuard
- * (Phase 3 inserts the throttler first).
+ * ThrottlerGuard runs first, so rate limits apply before authentication.
  */
 @Global()
 @Module({
+  // AuthModule provides the AUTHENTICATOR binding (JwtAuthenticator).
+  imports: [AuthModule, ThrottlerModule.forRoot(throttlerOptions)],
   providers: [
     RequestContext,
-    { provide: AUTHENTICATOR, useClass: DenyAllAuthenticator },
     { provide: MembershipResolver, useClass: PrismaMembershipResolver },
+    UserMembershipsService,
+    { provide: APP_GUARD, useClass: ThrottlerGuard },
     { provide: APP_GUARD, useClass: AuthGuard },
     { provide: APP_GUARD, useClass: TenantGuard },
     { provide: APP_GUARD, useClass: PermissionsGuard },
   ],
-  exports: [RequestContext],
+  // ThrottlerModule is re-exported so route-level guards (UserThrottleGuard)
+  // share the one in-memory counter store with the global ThrottlerGuard.
+  exports: [
+    RequestContext,
+    MembershipResolver,
+    UserMembershipsService,
+    ThrottlerModule,
+  ],
 })
 export class TenancyModule implements NestModule {
   configure(consumer: MiddlewareConsumer): void {

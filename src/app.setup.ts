@@ -8,6 +8,7 @@ import {
 import type { ConfigType } from '@nestjs/config';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
 import type { NextFunction, Request, Response } from 'express';
 import { toApiError } from './common/errors/to-api-error.js';
@@ -78,6 +79,18 @@ export function applyAppSetup(app: NestExpressApplication): void {
       : strictHelmet(req, res, next),
   );
 
+  // Responses that carry or reveal credentials must never be cached by the
+  // browser or a proxy: every sign-in endpoint and the signed-in user's account.
+  app.use((req: Request, res: Response, next: NextFunction) => {
+    if (
+      req.path.startsWith(`/${API_PREFIX}/v1/auth/`) ||
+      req.path.startsWith(`/${API_PREFIX}/v1/me`)
+    ) {
+      res.setHeader('Cache-Control', 'no-store');
+    }
+    next();
+  });
+
   app.enableCors({
     origin: cors.allowedOrigins.length > 0 ? cors.allowedOrigins : false,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
@@ -93,6 +106,8 @@ export function applyAppSetup(app: NestExpressApplication): void {
   });
 
   app.useBodyParser('json', { limit: JSON_BODY_LIMIT });
+  // Reads the HttpOnly refresh cookie (auth endpoints only look at it).
+  app.use(cookieParser());
 
   app.setGlobalPrefix(API_PREFIX);
   app.enableVersioning({ type: VersioningType.URI, defaultVersion: '1' });

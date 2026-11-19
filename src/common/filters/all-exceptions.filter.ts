@@ -1,6 +1,7 @@
 import { ArgumentsHost, Catch, ExceptionFilter, Logger } from '@nestjs/common';
 import type { Response } from 'express';
 import type { RequestWithId } from '../http/request-id.middleware.js';
+import { DomainError } from '../errors/domain-error.js';
 import { toApiError } from '../errors/to-api-error.js';
 
 /**
@@ -28,6 +29,15 @@ export class AllExceptionsFilter implements ExceptionFilter {
     }
 
     if (response.headersSent) return;
+    if (
+      exception instanceof DomainError &&
+      exception.options.retryAfterSeconds !== undefined
+    ) {
+      response.setHeader(
+        'Retry-After',
+        String(Math.max(1, Math.ceil(exception.options.retryAfterSeconds))),
+      );
+    }
     response.status(error.status).json({ error: { ...error, requestId } });
   }
 }

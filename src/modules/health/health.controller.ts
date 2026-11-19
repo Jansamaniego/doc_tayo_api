@@ -5,10 +5,12 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { HealthCheck, HealthCheckService } from '@nestjs/terminus';
+import { SkipThrottle } from '@nestjs/throttler';
 import { Public } from '../../common/decorators/public.decorator.js';
 import { DatabaseHealthIndicator } from './database.health.js';
 
 @Public()
+@SkipThrottle({ default: true })
 @ApiTags('health')
 @Controller({ path: 'health', version: VERSION_NEUTRAL })
 export class HealthController {

@@ -86,7 +86,7 @@ Conventions from master plan §6.1 apply: `snake_case` plural tables via `@@map`
 
 | Table | Columns (beyond id/timestamps) | Constraints |
 |---|---|---|
-| `users` | `email` (normalized lower-case, trimmed), `full_name`, `status` enum `pending \| active \| deactivated`, `platform_role` enum `none \| platform_admin` | `UNIQUE(email)`; `email` is **required** (D7). **No `password_hash` yet**; Phase 3 adds credentials by migration. `pending` means "has no credentials yet". |
+| `users` | `email` (normalized lower-case, trimmed), `full_name`, `status` enum `pending \| active \| deactivated`, `platform_role` enum `none \| platform_admin` | `UNIQUE(email)`; `email` is **required** (D7). **No `password_hash` in the Phase 2 migration**; Phase 3 added the credential columns (`20261119000000_authentication`). `pending` means "has no credentials yet". |
 | `permissions` | `key` (`resource.action`), `description` | `UNIQUE(key)`. Rows inserted by migrations, never by the API (§4.5). |
 | `tenants` | `name`, `slug`, `status` enum `active \| suspended \| deactivated`, `timezone` (IANA, default `Asia/Manila`), `contact_email?`, `contact_phone?` (E.164) | `UNIQUE(slug)`. The tenant row is the root and is not "tenant-owned". |
 
@@ -146,11 +146,11 @@ export interface Authenticator { authenticate(req: Request): Promise<Principal |
 export const AUTHENTICATOR = Symbol('AUTHENTICATOR');
 ```
 
-- **Production binding in Phase 2: `DenyAllAuthenticator`**, which always returns `null`. Every non-`@Public()` route answers `401 UNAUTHENTICATED`. Nothing tenant-scoped is reachable from outside until Phase 3 replaces the binding with the JWT authenticator. Fails closed.
+- **Phase 2 shipped a fail-closed `DenyAllAuthenticator`** (always `null`, so every non-`@Public()` route answered `401`). **Phase 3 replaced it with `JwtAuthenticator`** (`modules/auth`), which verifies the access token and re-checks the session on every request; the class and file were deleted. Tests may still bind `TestAuthenticator`.
 - **Tests bind `TestAuthenticator`** (lives in `test/support/`, never in `src/`) via `overrideProvider(AUTHENTICATOR)`. It reads `Authorization: Bearer test.<userId>.<tenantId|none>`.
 - An architecture test asserts nothing under `src/` imports from `test/` or references `TestAuthenticator`.
 - **Future principals (patient portal).** The guard chain must not assume that every authenticated user is a tenant member. `Principal` is expected to gain a `type` (`staff` | `patient`) in Phase 3; `TenantGuard` and `PermissionsGuard` apply to `staff` principals only, and a later portal guard authorizes `patient` principals through `patient_portal_links` (master plan §3.3 and §6). Phase 2 adds no portal code; this note only constrains how the guards are written.
-- Phase 3 adds `sessionId` to `Principal` and session re-verification to `TenantGuard`. That is an addition, not a rewrite.
+- Phase 3 added `sessionId` and `type` to `Principal`; the session re-verification lives in `JwtAuthenticator` (not `TenantGuard`, because `@TenantNotRequired()` routes need it too). An addition, not a rewrite.
 
 ---
 
@@ -235,7 +235,7 @@ Input: `name`, `slug`, `timezone?`, `ownerEmail`, `ownerFullName`, `defaultBranc
 2. Create the tenant (`active`).
 3. Create the default branch.
 4. Create the five system roles from templates, with their `role_permissions`.
-5. Create the owner membership (`active`) with the `owner` role. (A found user keeps their status; only newly created users are `pending`, and `TenantGuard` denies `pending` users until Phase 3.)
+5. Create the owner membership (`active`) with the `owner` role. (A found user keeps their status; only newly created users are `pending`, and `TenantGuard` denies `pending` users until they set a password through the emailed account-setup link, Phase 3.)
 6. Write the audit entry `tenant.created` in the same transaction.
 
 A slug conflict → `409 CONFLICT_UNIQUE` (Prisma `P2002` mapped by the service; only `slug` is unique on tenants). Any failure rolls back everything (tested by forcing a failure at step 5).
@@ -270,7 +270,7 @@ No `DELETE /branches` (master plan §6.5: deactivate when referenced; hard delet
 ```
 src/
   context/                    request-context.ts, request-context.middleware.ts
-  common/auth/                authenticator.ts, deny-all.authenticator.ts
+  common/auth/                authenticator.ts (deny-all.authenticator.ts existed in Phase 2; removed in Phase 3)
   common/decorators/          public.decorator.ts, tenant-not-required.decorator.ts, require-permissions.decorator.ts
   common/guards/              auth.guard.ts, permissions.guard.ts
   common/dto/pagination.ts    PaginationQueryDto (first list endpoint)
@@ -307,7 +307,7 @@ One test per row of §7.2, run with Clinic A in context against data in both cli
 
 ### 11.3 Guards and context (`test/tenancy-guards.e2e-spec.ts`, using `createTestApp` + `TestAuthenticator`)
 - No/invalid principal → 401 on a tenant route; `@Public()` health still 200.
-- Production binding (`DenyAllAuthenticator`) → 401 on every non-public route.
+- Production binding: `JwtAuthenticator` since Phase 3 (Phase 2: `DenyAllAuthenticator`); a credential it did not issue → 401 on every non-public route.
 - Principal without tenant → `403 TENANT_NOT_SELECTED`.
 - Not a member / membership `suspended` or `removed` / user `deactivated` → `403 TENANT_ACCESS_DENIED`.
 - Tenant `suspended` → `403 TENANT_SUSPENDED`; `deactivated` → `403 TENANT_DEACTIVATED`.
@@ -383,7 +383,7 @@ Also: positive cases for each endpoint, validation failures (missing name, over-
 | 2 | `invitations` schema in Phase 2 | Deferred to Phase 3 | Nothing in Phase 2 reads or writes it; Phase 3 owns acceptance and its token design |
 | 3 | Permission catalog seeded from code | Permission rows inserted by migrations; code catalog checked against the table by a test | Works everywhere `migrate deploy` runs (CI, Docker, production) with no extra seed step |
 | 4 | Read access implied for members | Explicit `tenant.read` and `branches.read` | Keeps deny-by-default uniform (every tenant route declares a permission) |
-| 5 | (not specified) | `DenyAllAuthenticator` until Phase 3 | Fail closed while no real authentication exists |
+| 5 | (not specified) | `DenyAllAuthenticator` in Phase 2 (replaced by `JwtAuthenticator` in Phase 3) | Fail closed while no real authentication existed |
 
 ---
 

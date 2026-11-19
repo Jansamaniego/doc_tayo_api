@@ -35,6 +35,8 @@ model Tenant {
   memberships TenantMembership[]
   roles       Role[]
   auditLogs   AuditLog[]
+  sessions    Session[]
+  invitations Invitation[]
 
   rolePermissions RolePermission[]
   membershipRoles MembershipRole[]
@@ -75,8 +77,9 @@ model TenantMembership {
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   user   User   @relation(fields: [userId], references: [id], onDelete: Restrict)
 
-  roles     MembershipRole[]
-  auditLogs AuditLog[]
+  roles       MembershipRole[]
+  auditLogs   AuditLog[]
+  invitations Invitation[]
 
   @@unique([tenantId, id])
   @@unique([tenantId, userId])
@@ -97,6 +100,7 @@ model Role {
 
   permissions RolePermission[]
   memberships MembershipRole[]
+  invitations Invitation[]
 
   @@unique([tenantId, id])
   @@unique([tenantId, key])
@@ -135,4 +139,31 @@ model MembershipRole {
   @@id([membershipId, roleId])
   @@unique([tenantId, id])
   @@map("membership_roles")
+}
+
+/// Pending offer to join a clinic. `token_hash` is the SHA-256 of the emailed
+/// token. A partial unique index (raw SQL in the migration) allows at most one
+/// OPEN invitation (not accepted, not revoked) per email per tenant.
+model Invitation {
+  id                    String    @id @default(uuid(7)) @db.Uuid
+  tenantId              String    @map("tenant_id") @db.Uuid
+  email                 String
+  roleId                String    @map("role_id") @db.Uuid
+  invitedByMembershipId String    @map("invited_by_membership_id") @db.Uuid
+  tokenHash             String    @unique @map("token_hash")
+  expiresAt             DateTime  @map("expires_at") @db.Timestamptz(6)
+  acceptedAt            DateTime? @map("accepted_at") @db.Timestamptz(6)
+  acceptedUserId        String?   @map("accepted_user_id") @db.Uuid
+  revokedAt             DateTime? @map("revoked_at") @db.Timestamptz(6)
+  createdAt             DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant       Tenant           @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  role         Role             @relation(fields: [tenantId, roleId], references: [tenantId, id], onDelete: Restrict)
+  invitedBy    TenantMembership @relation(fields: [tenantId, invitedByMembershipId], references: [tenantId, id], onDelete: Restrict)
+  acceptedUser User?            @relation(fields: [acceptedUserId], references: [id], onDelete: Restrict)
+
+  @@unique([tenantId, id])
+  @@index([tenantId, email])
+  @@map("invitations")
 }

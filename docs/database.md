@@ -35,9 +35,11 @@ This creates the roles, `doc_tayo` (reused if it exists) and `doc_tayo_test`, an
 | `npm run db:migrate:deploy` | CI / production |
 | `npm run db:migrate:status` | Check drift |
 
-Never edit an applied migration. Raw SQL belongs in a migration when Prisma cannot model it (exclusion constraints, `pg_trgm`, RLS).
+Never edit an applied migration. In Docker, `docker compose run` reuses the existing `migrate` image: after adding a migration use `docker compose run --rm --build migrate` so the image contains it. Raw SQL belongs in a migration when Prisma cannot model it (exclusion constraints, `pg_trgm`, RLS).
 
 `20261118000000_tenancy_foundation` (Phase 2) creates `users`, `permissions`, `tenants`, `branches`, `tenant_memberships`, `roles`, `role_permissions`, `membership_roles`, `audit_logs`; inserts the permission catalog rows; and ends with `REVOKE UPDATE, DELETE, TRUNCATE ON audit_logs FROM doctayo_app` (append-only, tested as the runtime role).
+
+`20261119000000_authentication` (Phase 3) adds the credential columns on `users`; `sessions`, `refresh_tokens`, `user_tokens` and `invitations` (with its partial unique index: one open invitation per email per tenant); the `members.invite` permission and its grant to existing owner/clinic_admin roles; and the `nest_outbox` schema used by `@nestjs/outbox` (SQL from `npx @nestjs/outbox sql`, package 0.1.4) with `GRANT`s and default privileges for the runtime role. The outbox store runs with `migrate: false`; a package upgrade that needs a newer schema version adds its SQL in a new migration.
 
 Conventions in force: snake_case plural tables, UUIDv7 ids generated **by the client** (`@default(uuid(7))`; raw SQL inserts must supply ids), `timestamptz` timestamps with a database default, composite `(tenant_id, id)` keys for every tenant-owned table, `onDelete: Restrict` everywhere. See `docs/multitenancy.md`.
 

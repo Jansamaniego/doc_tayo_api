@@ -7,7 +7,7 @@
 > **Sync rule:** this plan and the child plans describe the code **as it is**. Whenever implemented code differs from a plan, the plan is edited in the same change (see `CLAUDE.md`, "Plans and docs stay aligned with the code").
 >
 > **Child plans** (must stay consistent with this document):
-> `plans/00-project-foundation.md` (Phase 1, implemented) · `plans/01-multitenancy.md` (Phase 2, implemented) · `plans/02-authentication.md` (Phase 3, draft awaiting approval) · `plans/03-user-management-and-authorization.md` · `plans/04-core-clinic-apis.md` · `plans/05-additional-clinic-apis.md`
+> `plans/00-project-foundation.md` (Phase 1, implemented) · `plans/01-multitenancy.md` (Phase 2, implemented) · `plans/02-authentication.md` (Phase 3, implemented) · `plans/03-user-management-and-authorization.md` · `plans/04-core-clinic-apis.md` · `plans/05-additional-clinic-apis.md` (03–05 not written yet)
 
 ---
 
@@ -23,17 +23,18 @@ The Phase 1 foundation is in place. Everything below was verified against the re
 | Tests | Vitest 4: unit (`src/**/*.spec.ts`, `test/architecture/**`) and e2e (`test/**/*.e2e-spec.ts`, real PostgreSQL), supertest | Mocks are `vi.fn()`. No Jest. |
 | Lint/format | oxlint (type-aware) + Prettier. **ESLint is not used** (ADR-0006) | Rules oxlint cannot express live in `test/architecture/forbidden-patterns.spec.ts`. |
 | ORM | **Prisma `7.10.1` pinned exactly** for `prisma`, `@prisma/client` and `@prisma/adapter-pg` (ADR-0001). Prisma 8 RC removed | Do not run `npm i prisma@latest` (it installs the 8 RC). |
-| Prisma layout | `prisma.config.ts` (Prisma 7 `defineConfig`; datasource URL = `DATABASE_MIGRATION_URL`, loads `.env` itself); schema folder `prisma/schema/` (`base.prisma`, `identity.prisma`, `tenancy.prisma`, `audit.prisma`); migration `tenancy_foundation`; generated client in `src/generated/prisma` (gitignored) | Phase 2 added the tenancy models. |
+| Prisma layout | `prisma.config.ts` (Prisma 7 `defineConfig`; datasource URL = `DATABASE_MIGRATION_URL`, loads `.env` itself); schema folder `prisma/schema/` (`base.prisma`, `identity.prisma`, `tenancy.prisma`, `audit.prisma`); migrations `tenancy_foundation` (Phase 2) and `authentication` (Phase 3, also creates the `nest_outbox` schema); generated client in `src/generated/prisma` (gitignored) | Phase 2 added the tenancy models, Phase 3 the credential, session and invitation models. |
 | Database | PostgreSQL 17. Roles: `doctayo_owner` (migrations), `doctayo_app` (runtime, DML only, `NOBYPASSRLS`). `scripts/db/bootstrap.sql` is idempotent. `PrismaService` fails fast on connect and refuses to start in production if its role is a superuser or bypasses RLS | Role separation (needed for a future RLS option) exists from day one. |
-| Config | `src/config` validates every env var at boot with `class-validator` and exposes typed namespaces `app`, `database`, `cors`, `logging`, `swagger`, `observe`. Only `src/config` and tests may touch `process` (lint rule) | The app refuses to start on invalid config; errors name variables, never values. |
+| Config | `src/config` validates every env var at boot with `class-validator` and exposes typed namespaces `app`, `database`, `cors`, `logging`, `swagger`, `observe`, `auth`, `mail`. `JWT_ACCESS_SECRET` is required in every environment. Only `src/config` and tests may touch `process` (lint rule) | The app refuses to start on invalid config; errors name variables, never values. |
 | HTTP foundation | `app.setup.ts` applies request id, access log, Helmet, CORS, 1 MB JSON limit, global prefix `api` + URI versioning (default `v1`), global `ValidationPipe`, `AllExceptionsFilter`, Swagger, shutdown hooks. `main.ts` and the e2e tests share it | Tests exercise the real stack. |
-| Errors | One envelope `{ error: { status, code, message, details?, requestId } }`, stable code catalog (`src/common/errors/error-codes.ts`, `docs/error-codes.md`), `DomainError`. Active since Phase 2: `UNAUTHENTICATED`, `FORBIDDEN`, `TENANT_NOT_SELECTED`, `TENANT_SUSPENDED`, `TENANT_DEACTIVATED`, `TENANT_ACCESS_DENIED`. `CONFLICT` is produced by the tenant lifecycle service. `RATE_LIMITED` (429) and `METHOD_NOT_ALLOWED` (405) are only mapped from framework exceptions; nothing throws 429 until the Phase 3 throttler | Success envelopes (`{ data }`, `{ data, meta }`) are returned explicitly by controllers; no global wrapping interceptor (ADR-0005). |
+| Errors | One envelope `{ error: { status, code, message, details?, requestId } }`, stable code catalog (`src/common/errors/error-codes.ts`, `docs/error-codes.md`), `DomainError`. Active since Phase 2: `UNAUTHENTICATED`, `FORBIDDEN`, `TENANT_NOT_SELECTED`, `TENANT_SUSPENDED`, `TENANT_DEACTIVATED`, `TENANT_ACCESS_DENIED`. `CONFLICT` is produced by the tenant lifecycle service and invitations. Added in Phase 3: `INVALID_CREDENTIALS`, `ACCESS_TOKEN_EXPIRED`, `TOKEN_INVALID`, `ROLE_NOT_ASSIGNABLE` and the field codes `PASSWORD_TOO_COMMON`, `PASSWORD_CONTAINS_EMAIL`, `PASSWORD_INCORRECT`. `RATE_LIMITED` (429) comes from the throttler (mapped from its 429) and from account lockout (a `DomainError` with `Retry-After`); `METHOD_NOT_ALLOWED` (405) is only mapped from framework exceptions | Success envelopes (`{ data }`, `{ data, meta }`) are returned explicitly by controllers; no global wrapping interceptor (ADR-0005). |
 | Observability | `@nestjs/observe` configured with PHI redaction, request-body capture off, header allow-list, query strings obfuscated, `forwardLogs` off. Request ids are server-validated UUIDs (ADR-0004) | Observe is enabled by default only in production. |
 | Health | `GET /api/health` (liveness, no dependencies) and `GET /api/health/ready` (real `SELECT 1`, 1 s timeout, up/down only), version-neutral, via `@nestjs/terminus` | `@Public()` (Phase 2), so it stays reachable under the deny-by-default guards. |
 | Docker | Multi-stage `Dockerfile` (`runtime` and `migrate` targets, non-root, `HEALTHCHECK`); a single local Compose stack (`api`, `postgres`, one-off `migrate`); CI builds both targets | See §2.1. |
 | CI | GitHub Actions: lint, format check, typecheck, unit tests, bootstrap DB, `migrate deploy`, e2e against Postgres 17, build, informational `npm audit`, Docker build | |
-| Domain code | Tenancy foundation (Phase 2): tenants, memberships, roles, branches, audit, request context, guards (`AuthGuard` -> `TenantGuard` -> `PermissionsGuard`), `TenantPrismaService`. No login yet (production authenticator is `DenyAllAuthenticator`, so every protected route answers `401`); no clinic data | Phase 3 adds authentication. |
-| Not installed (by design) | Redis, queues, `@nestjs/throttler`, `@nestjs/jwt`, `argon2`, `@nestjs/schedule`, `@nestjs/mail`, any AWS SDK | Added only in the phase that needs them. |
+| Domain code | Tenancy foundation (Phase 2): tenants, memberships, roles, branches, audit, request context, guards (`AuthGuard` -> `TenantGuard` -> `PermissionsGuard`), `TenantPrismaService`. Authentication (Phase 3): Argon2id passwords, access JWT + server-side sessions with rotated refresh cookies, login/refresh/logout/switch-tenant, password reset/change, account setup, invitations, throttling and lockout, mail through the transactional outbox, nightly cleanup, audited auth events; the production authenticator is `JwtAuthenticator`. No clinic data | Phase 4 adds member management and the platform-admin API. |
+| Installed in Phase 3 | `@nestjs/jwt`, `argon2`, `@nestjs/throttler`, `@nestjs/schedule`, `cookie-parser`, and (pinned exactly, both 0.x) `@nestjs/mail` 0.0.2 and `@nestjs/outbox` 0.1.4 | Mail and outbox are confined to `modules/mail` (ADR-0013). |
+| Not installed (by design) | Redis, BullMQ, `@nestjs/authentication`, any AWS SDK | Added only in the phase that needs them. |
 
 ---
 
@@ -64,9 +65,9 @@ The Phase 1 foundation is in place. Everything below was verified against the re
 | API docs | `@nestjs/swagger` (**installed**) | OpenAPI 3; served at `/api/docs`; on by default outside production, off in production (`SWAGGER_ENABLED`). |
 | Validation | DTOs + `class-validator` / `class-transformer` via global `ValidationPipe` (**installed**) | `whitelist: true`, `forbidNonWhitelisted: true`, `transform: true`, implicit conversion off. |
 | Config | `@nestjs/config` with schema-validated env at startup (**installed**) | App refuses to boot with invalid config. Environment-driven so one image runs in every environment (§2.1). |
-| Auth | JWT (`@nestjs/jwt`, or `@nestjs/authentication` after evaluation) | Evaluate first-party `@nestjs/authentication`/`@nestjs/authorization` at Phase 3/4 start; adopt if they fit the design here, otherwise implement guards directly. |
+| Auth | `@nestjs/jwt` + `argon2` on the existing `Authenticator` seam; `@nestjs/authentication` evaluated and **not adopted** (ADR-0011) | Revisit `@nestjs/authentication` at 1.0, especially for MFA/OIDC. `@nestjs/authorization` is evaluated at Phase 4. |
 | Password hashing | Argon2id (`argon2` package) | OWASP-recommended parameters (§8.1). |
-| Rate limiting | `@nestjs/throttler` (**planned, Phase 3**) | In-memory store while single-instance; a shared store (for example Redis) only when scaled out and only once Redis is actually adopted. |
+| Rate limiting | `@nestjs/throttler` 6.x (**Phase 3, done**) | In-memory store while single-instance; a shared store (for example Redis) only when scaled out and only once Redis is actually adopted. |
 | Health checks | `@nestjs/terminus` (**installed**) | `/api/health` (liveness), `/api/health/ready` (DB). |
 | Scheduled work | `@nestjs/schedule` (+ `@nestjs/locks` when multi-instance) | Token cleanup, reminders. |
 | Async side effects | Transactional outbox (evaluate `@nestjs/outbox`) | Emails/SMS sent after commit. No Redis until justified. |
@@ -123,7 +124,7 @@ Local Compose services: `api`, `postgres`, `migrate` (profile `tools`, so `up` n
 
 Rule: **every table that holds tenant data has its own `tenant_id` column — including join tables.** No table infers its tenant only through a parent. This keeps scoping uniform and makes RLS possible later without schema changes.
 
-**As built (Phase 2):** these tables exist: `users`, `permissions`, `tenants`, `branches`, `tenant_memberships`, `roles`, `role_permissions`, `membership_roles`, `audit_logs`. `sessions` and `user_tokens` arrive with Phase 3 (authentication); `invitations` with Phase 3 (plans/01 D2); clinic tables from Phase 5. `audit_logs.tenant_id` is nullable, so `audit_logs` is attributed to a tenant but is **not** in the tenant-owned model registry (audit rows are written through `AuditService`, see §8 item 13).
+**As built (Phase 2):** these tables exist: `users`, `permissions`, `tenants`, `branches`, `tenant_memberships`, `roles`, `role_permissions`, `membership_roles`, `audit_logs`. Phase 3 added `sessions`, `refresh_tokens`, `user_tokens` (global) and `invitations` (tenant-owned, a registry model), plus the credential columns on `users`; clinic tables arrive from Phase 5. `audit_logs.tenant_id` is nullable, so `audit_logs` is attributed to a tenant but is **not** in the tenant-owned model registry (audit rows are written through `AuditService`, see §8 item 13).
 
 ### 3.3 Tenant context: how a request gets its tenant
 
@@ -131,10 +132,10 @@ Rule: **every table that holds tenant data has its own `tenant_id` column — in
 
 1. User logs in → session created.
 2. If the user has exactly one active membership, it becomes the active tenant automatically. Otherwise the client calls `POST /api/v1/auth/switch-tenant`.
-3. The server verifies an **active membership** in an **active tenant**, records `active_tenant_id` on the session, and issues a new access token carrying `tid` (tenant id).
+3. The server verifies an **active membership** in an **active tenant** and records `active_tenant_id` on the session. The change applies to the very next request; **no new token is issued and the access token carries no tenant** (plans/02-authentication.md D5).
 4. On every request, `TenantGuard` (runs after authentication):
-   - reads the active tenant from the authenticated principal (`tid` in the verified token once Phase 3 exists; never from a body/query/header);
-   - re-verifies in one query that the user is `active`, the membership is `active`, and the tenant is not suspended/deactivated (Phase 2: one parameterized `$queryRaw` joining membership, user, tenant and effective permissions; Phase 3 adds the session check);
+   - reads the active tenant from the authenticated principal (`sessions.active_tenant_id`, read by `JwtAuthenticator`; never from a body/query/header);
+   - re-verifies in one query that the user is `active`, the membership is `active`, and the tenant is not suspended/deactivated (Phase 2: one parameterized `$queryRaw` joining membership, user, tenant and effective permissions; the session itself is re-checked by `JwtAuthenticator`, one indexed query, on every request);
    - loads the membership's effective permissions;
    - stores `{ userId, sessionId, tenantId, membershipId, permissions }` in a `RequestContext` (AsyncLocalStorage).
 5. Services and the tenant-scoped Prisma client read the tenant from `RequestContext`. **Tenant id is never a method parameter supplied by controllers.**
@@ -168,7 +169,7 @@ As built in Phase 2: `@Public()`, `@TenantNotRequired()` and `@RequirePermission
 
 | Stage | Behavior |
 |---|---|
-| **Creation / onboarding** | One transaction creates: the owner user (found by normalized email, else created with `status = pending` until Phase 3 sets credentials), tenant (`status = active`), default branch (`Main`), the five system roles from templates, owner membership (`active`) and an audit entry. **Phase 2: a service only (`TenantOnboardingService`), no HTTP endpoint**; the endpoint is `POST /api/v1/admin/tenants` in Phase 4. Initially **provisioned by a platform admin** (controlled pilot); a self-service signup endpoint can be enabled later by config (Q3). |
+| **Creation / onboarding** | One transaction creates: the owner user (found by normalized email, else created with `status = pending` until the emailed account-setup link sets a password), tenant (`status = active`), default branch (`Main`), the five system roles from templates, owner membership (`active`) and an audit entry. **A service only (`TenantOnboardingService`), no HTTP endpoint** (since Phase 3 it also issues the owner's 7-day setup link, or an ownership notice for an existing account, in the same transaction); the endpoint is `POST /api/v1/admin/tenants` in Phase 4. Initially **provisioned by a platform admin** (controlled pilot); a self-service signup endpoint can be enabled later by config (Q3). |
 | **Configuration** | Owner/admin manages profile (name, contact, timezone default `Asia/Manila`), branches, staff invitations, roles. |
 | **Membership management** | Invite by email → `invitations` row (hashed token, 7-day expiry) → acceptance creates/activates membership. Statuses: `invited`, `active`, `suspended`, `removed`. Invariant: a tenant always has ≥ 1 active owner; the last owner cannot be removed or demoted. |
 | **Switching** | `POST /auth/switch-tenant` (§3.3). Last-used tenant stored on the session for convenience. |
@@ -205,31 +206,33 @@ Authentication knows nothing about clinic business logic; it lives in the same d
 
 | Item | Decision |
 |---|---|
-| Access token | JWT, 15 min TTL, signed with a strong secret (HS256) held only by the API. Claims: `sub` (user id), `sid` (session id), `tid` (active tenant id or null), `iat`, `exp`. **No roles/permissions in the token** — loaded per request so revocations apply immediately. |
+| Access token | JWT, 15 min TTL, signed with a strong secret (HS256) held only by the API. Claims: `sub` (user id), `sid` (session id), `typ` (`staff`), `iat`, `exp`, `iss` (`doctayo-api`), `aud` (`doctayo`). **No roles, permissions or tenant in the token** — loaded per request so revocations apply immediately. |
 | Refresh token | Opaque 256-bit random value. Stored **only as a SHA-256 hash** in `sessions`. |
 | Rotation | Each refresh issues a new refresh token and invalidates the old one. |
 | Reuse detection | Presenting an already-rotated refresh token revokes the whole session family (likely theft). |
 | Lifetimes | Idle timeout 14 days, absolute 30 days (configurable). Chosen to avoid frequent re-login for older users while bounding risk. |
-| Per-request session check | `TenantGuard`/`JwtAuthGuard` confirms the session is not revoked (indexed lookup, combined with the membership query). Logout is effective immediately. |
-| Transport | Refresh token delivery mechanism (httpOnly cookie vs response body) depends on frontend deployment topology — **Q5**. Default: httpOnly, `Secure`, `SameSite=Strict` cookie scoped to `/api/v1/auth`; access token in the JSON response body. |
+| Per-request session check | `JwtAuthenticator` re-reads the session (joined to its user) on every request: not revoked, idle and absolute expiry not passed, user `active`. This is a separate indexed query from `TenantGuard`'s membership query, because `@TenantNotRequired()` routes need the session check too. Logout, password change/reset and deactivation are effective on the next request. |
+| Transport | **httpOnly cookie** (Q5 resolved, ADR-0012): cookie `dt_refresh`, `HttpOnly`, `Secure` (everywhere except development), `SameSite=Strict`, `Path=/api/v1/auth`; the cookie endpoints also require an `Origin` from `CORS_ALLOWED_ORIGINS`. The access token is in the JSON body and held in memory by the client. Requires `CORS_ALLOW_CREDENTIALS=true`. |
 
 ### 4.3 Account flows
 
 | Flow | Endpoint (representative) | Key rules |
 |---|---|---|
 | Account creation | Via invitation acceptance or tenant onboarding; public self-registration **off by default** (Q3) | Email normalized (trimmed, lowercased) and unique. |
-| Email verification | `POST /auth/email/verify` | Required before first login for self-registered accounts; accepting an emailed invitation counts as verification. |
+| Email verification | `POST /auth/email/verify` (**deferred to Phase 4**, plans/02 D6) | Nothing produces verification tokens until email change (Phase 4) or self-registration. Consuming an emailed invitation, setup or reset token already marks the email verified. |
 | Login | `POST /auth/login` | Generic failure message (`INVALID_CREDENTIALS`); throttled (§8.9). Response includes the user's memberships so the client can choose a tenant. |
 | Refresh | `POST /auth/refresh` | Rotation + reuse detection. |
 | Logout | `POST /auth/logout` | Revokes current session. |
 | Logout everywhere | `POST /auth/logout-all` | Revokes all user sessions. |
-| Switch tenant | `POST /auth/switch-tenant` | Verifies membership; new access token with `tid`. |
+| Switch tenant | `POST /auth/switch-tenant` | Verifies membership (the same rule as `TenantGuard`); stores the tenant on the session; effective on the next request, no new token. |
 | Current user | `GET /me` | Profile + active tenant + effective permissions in that tenant. |
-| Profile | `PATCH /me` | Global profile fields only (name, phone). Email change requires re-verification. |
+| Profile | `PATCH /me` (**Phase 4**) | Global profile fields only (name, phone). Email change requires re-verification. |
 | Change password | `POST /me/password` | Requires current password; revokes all other sessions. |
 | Forgot password | `POST /auth/password/forgot` | Always returns `202` (no account enumeration). Single-use hashed token, 30 min expiry. |
 | Reset password | `POST /auth/password/reset` | Consumes token, revokes all sessions. |
-| Sessions | `GET /me/sessions`, `DELETE /me/sessions/:id` | Device/IP/last-used metadata. |
+| Sessions | `GET /me/sessions`, `DELETE /me/sessions/:id` | Device/IP/last-used metadata. Revoking another user's session id is `404`. |
+| Account setup | `POST /auth/account/setup` | First password for an onboarded `pending` owner, from a single-use 7-day emailed link. |
+| Invitations | `POST /invitations`, `POST /invitations/:id/resend`, `POST /invitations/accept` | Create/resend need `members.invite`; accept is public (the token is the credential). Listing and revocation: Phase 4. |
 | Activation/deactivation | Platform admin: `PATCH /admin/users/:id/status` | Deactivated users cannot log in; all sessions revoked. Tenant admins suspend **memberships**, not global accounts. |
 | Assisted reset | Tenant admin can re-send an invitation/reset email for a member | Supports staff who struggle with self-service; admin never sees or sets passwords. |
 
@@ -250,9 +253,9 @@ Authentication knows nothing about clinic business logic; it lives in the same d
 
 Global guard order:
 
-1. `ThrottlerGuard` (Phase 3)
-2. `AuthGuard` (Phase 2) — asks the pluggable `Authenticator` for the principal; skipped for `@Public()`. Production binding in Phase 2 is `DenyAllAuthenticator` (always `401`); Phase 3 replaces it with the JWT authenticator. Tests bind `TestAuthenticator` from `test/support/`.
-3. `TenantGuard` — membership/tenant validation (session check in Phase 3); populates `RequestContext`; skipped for `@Public()` and `@TenantNotRequired()`.
+1. `ThrottlerGuard` — rate limits apply before authentication (§8 item 9).
+2. `AuthGuard` — asks the pluggable `Authenticator` for the principal; skipped for `@Public()`. The production binding is `JwtAuthenticator` (session re-verified on every request); tests may bind `TestAuthenticator` from `test/support/`.
+3. `TenantGuard` — membership/tenant validation; populates `RequestContext`; skipped for `@Public()` and `@TenantNotRequired()`.
 4. `PermissionsGuard` — checks `@RequirePermissions('patients.write')` against the context. **A tenant-scoped route without `@RequirePermissions` is denied at runtime and fails the route-registry test** (deny by default).
 5. **Resource-level checks** in services, through small policy functions per domain (e.g., `EncounterPolicy.canAmend(ctx, encounter)`), not ad-hoc `if`s in controllers.
 
@@ -285,13 +288,14 @@ Cross-tenant access to a record returns **404 Not Found**, not 403, so record ex
 
 | Table | Scope | Purpose / key constraints |
 |---|---|---|
-| `users` | Global | **Phase 2:** `email` (required, unique, normalized), `full_name`, `status` (`pending` \| `active` \| `deactivated`), `platform_role` (`none` \| `platform_admin`). **Phase 3 adds:** `password_hash` (globally omitted from Prisma results), `email_verified_at`, `failed_login_count`, `locked_until`. |
-| `sessions` | Global (Phase 3) | Refresh token hash, family id, `active_tenant_id`, user agent, IP, `last_used_at`, `expires_at`, `revoked_at`. |
-| `user_tokens` | Global (Phase 3) | Hashed single-use tokens, `type` (`email_verification`, `password_reset`), `expires_at`, `used_at`. |
+| `users` | Global | **Phase 2:** `email` (required, unique, normalized), `full_name`, `status` (`pending` \| `active` \| `deactivated`), `platform_role` (`none` \| `platform_admin`). **Phase 3 added:** `password_hash` (globally omitted from Prisma results), `email_verified_at`, `password_changed_at`, `failed_login_count`, `locked_until`. |
+| `sessions` | Global (Phase 3) | One row per refresh-token family: `active_tenant_id`, `principal_type`, user agent, IP, `last_used_at`, `idle_expires_at`, `absolute_expires_at`, `revoked_at`, `revoked_reason`. |
+| `refresh_tokens` | Global (Phase 3) | SHA-256 hash of each issued refresh token, `rotated_at`; a rotated token presented again is reuse. |
+| `user_tokens` | Global (Phase 3) | Hashed single-use tokens, `type` (`password_reset`, `account_setup`; `email_verification` is added when something produces it), `expires_at`, `used_at`. |
 | `tenants` | Global (the root) | `name`, `slug` (the only unique column; two clinics may share a name), `status` (`active` \| `suspended` \| `deactivated`), `timezone` (default `Asia/Manila`), `contact_email?`, `contact_phone?`. |
 | `branches` | Tenant | `UNIQUE(tenant_id, name)`, `address_line?`, `city?`, `province?`, `timezone?` override, `is_active`. |
 | `tenant_memberships` | Tenant | `UNIQUE(tenant_id, user_id)`, status, job title, joined/removed dates. |
-| `invitations` | Tenant (Phase 3) | Email, intended roles, hashed token, expiry, accepted/revoked timestamps. |
+| `invitations` | Tenant (Phase 3) | Email, one role, hashed token, expiry, accepted/revoked timestamps; composite FKs to role and inviter membership; a partial unique index allows one open invitation per email per tenant. |
 | `permissions` | Global | `key` unique, description. Seeded from code. |
 | `roles` | Tenant | `UNIQUE(tenant_id, key)`, `is_system`. |
 | `role_permissions` | Tenant | PK `(role_id, permission_id)` plus a non-PK `id` with `UNIQUE(tenant_id, id)` so the tenant-owned rule has no exceptions. |
@@ -419,19 +423,20 @@ The error envelope is **implemented**. Error `code`s are a documented, append-on
 ### 7.7 Representative endpoints (not exhaustive)
 
 ```
-# Auth (public unless noted)
+# Auth (public unless noted) — implemented, Phase 3 (docs/authentication.md)
 POST   /api/v1/auth/login
-POST   /api/v1/auth/refresh
-POST   /api/v1/auth/logout                      (auth)
-POST   /api/v1/auth/logout-all                  (auth)
+POST   /api/v1/auth/refresh                     (refresh cookie + Origin)
+POST   /api/v1/auth/logout                      (auth + Origin)
+POST   /api/v1/auth/logout-all                  (auth + Origin)
 POST   /api/v1/auth/switch-tenant               (auth, no tenant required)
 POST   /api/v1/auth/password/forgot
 POST   /api/v1/auth/password/reset
-POST   /api/v1/auth/email/verify
+POST   /api/v1/auth/account/setup               (onboarded owners, token in body)
+POST   /api/v1/auth/email/verify                (planned, Phase 4; plans/02 D6)
 
-# Current user (auth, no tenant required)
+# Current user (auth, no tenant required) — implemented, Phase 3 (except PATCH)
 GET    /api/v1/me
-PATCH  /api/v1/me
+PATCH  /api/v1/me                               (planned, Phase 4)
 POST   /api/v1/me/password
 GET    /api/v1/me/memberships
 GET    /api/v1/me/sessions
@@ -446,15 +451,15 @@ GET    /api/v1/branches/:branchId                (implemented)
 PATCH  /api/v1/branches/:branchId                (implemented; no DELETE, deactivate with isActive)
 
 # Members, invitations, roles
-GET    /api/v1/members
-PATCH  /api/v1/members/:membershipId            (status, roles)
-POST   /api/v1/invitations
-POST   /api/v1/invitations/:invitationId/resend
-POST   /api/v1/invitations/accept               (public, token in body)
-GET    /api/v1/roles
-GET    /api/v1/permissions
+GET    /api/v1/members                          (planned, Phase 4)
+PATCH  /api/v1/members/:membershipId            (planned, Phase 4; status, roles)
+POST   /api/v1/invitations                      (implemented, Phase 3; members.invite)
+POST   /api/v1/invitations/:invitationId/resend (implemented, Phase 3; members.invite)
+POST   /api/v1/invitations/accept               (implemented, Phase 3; public, token in body)
+GET    /api/v1/roles                            (planned, Phase 4)
+GET    /api/v1/permissions                      (planned, Phase 4)
 
-# Clinic operations
+# Clinic operations (planned, Phases 5–6)
 GET    /api/v1/patients?q=…
 POST   /api/v1/patients
 GET    /api/v1/patients/:patientId
@@ -464,7 +469,7 @@ POST   /api/v1/appointments/:appointmentId/cancel
 POST   /api/v1/encounters/:encounterId/finalize
 POST   /api/v1/encounters/:encounterId/prescriptions
 
-# Platform administration
+# Platform administration (planned, Phase 4)
 POST   /api/v1/admin/tenants
 PATCH  /api/v1/admin/tenants/:tenantId/status
 PATCH  /api/v1/admin/users/:userId/status
@@ -501,7 +506,7 @@ The backend cannot design UI, but it can make simple, forgiving workflows possib
 6. **Authorization checks** — deny-by-default permissions guard; resource-level policies in services.
 7. **Input validation** — global `ValidationPipe` (`whitelist`, `forbidNonWhitelisted`, `transform`); max lengths on all strings; request body size limit; UUID param validation.
 8. **SQL injection prevention** — Prisma parameterized queries only; `$queryRawUnsafe` forbidden (lint rule); tagged `$queryRaw` with reviewed parameters only.
-9. **Rate limiting & brute force** — global throttling; stricter limits on `login`, `refresh`, `password/forgot`, `invitations/accept`; per-account progressive delay/temporary lock after repeated failures (with limits to avoid lockout-as-DoS); all failures audited.
+9. **Rate limiting & brute force** — global throttling; stricter limits on `login`, `refresh`, `password/forgot`, `invitations/accept`; per-account progressive delay/temporary lock after repeated failures (with limits to avoid lockout-as-DoS); failures for existing accounts are audited. **As built (Phase 3):** 300/min per IP default; login 5 per 15 min per IP+email and 30 per 15 min per IP; refresh 30/min; recovery, account setup and invitation acceptance 5 per 15 min per IP; password change 5 per 15 min per user; lockout for 15 minutes after 10 consecutive failures. Failed logins for unknown emails are not audited (no user id; they only count toward the throttle).
 10. **CORS** — explicit allow-list of frontend origins from config; credentials only for those origins; no wildcard in production.
 11. **Secrets management** — env vars only, validated at startup; `.env` git-ignored (already); production secrets in the host's secret manager; separate secrets per environment; key rotation procedure documented.
 12. **Sensitive data handling** —
@@ -538,7 +543,7 @@ src/
     dto/                       # ApiResponse / PaginatedResponse envelopes, pagination query DTO
     decorators/                # @Public, @TenantNotRequired, @RequirePermissions; later: @PlatformAdmin, @CurrentContext
     guards/                    # AuthGuard, PermissionsGuard; later: PlatformAdminGuard
-    auth/                      # Authenticator seam (AUTHENTICATOR token, DenyAllAuthenticator); Phase 3 adds the JWT authenticator
+    auth/                      # Authenticator seam (AUTHENTICATOR token, Principal); the production binding lives in modules/auth
     validation/                # IANA timezone validator, trim transform
     utils/                     # later
   observability/               # Observe wiring and redaction settings
@@ -548,17 +553,19 @@ src/
   modules/
     health/                    # liveness + readiness (exists)
     audit/                     # AuditService (same-transaction, append-only audit_logs)
-    auth/                      # later: login, tokens, sessions, password flows
-    users/                     # later: global profile, platform account admin
+    auth/                      # login, access tokens, sessions, refresh rotation, password flows, account setup, invitation acceptance, throttle config (JwtAuthenticator)
+    users/                     # /me, /me/memberships, /me/sessions, POST /me/password; later: global profile, platform account admin
     tenants/                   # TenantOnboardingService, TenantLifecycleService, tenant profile endpoints
     tenancy/                   # TenantGuard, MembershipResolver, TenancyModule (context middleware + global guards)
     branches/                  # branch endpoints (tenant client only)
-    members/                   # later: memberships + invitations
+    members/                   # invitations (create, resend; tenant client only); later: member administration
+    mail/                      # transactional-outbox email: MailQueue, mail classes, outbox handler, transport selection
+    maintenance/               # nightly cleanup job (@nestjs/schedule)
     access-control/            # catalog.ts (permissions + role templates); later: roles, policies
     patients/ practitioners/ appointments/ clinical/ services-catalog/ billing/ notifications/ reports/ admin/   # later
 prisma/
   schema/                      # multi-file schema: base, identity, tenancy, audit; one file per later domain
-  migrations/                  # 20261118000000_tenancy_foundation (Phase 2) and later
+  migrations/                  # 20261118000000_tenancy_foundation (Phase 2), 20261119000000_authentication (Phase 3) and later
   seed/                        # later
 scripts/
   db/                          # bootstrap.sql (roles, databases, grants), bootstrap.mjs, grants.sql, reset-test-db.mjs
@@ -566,10 +573,10 @@ scripts/
 test/
   setup/                       # global setup (migrates the *_test DB), env loading, app factory, log capture
   architecture/                # forbidden-patterns, prisma-access (who may inject PrismaService; no test code in src), tenant-registry (composite-FK convention)
-  *.e2e-spec.ts                # health, errors, security, conventions, database, swagger, request id/logging; tenancy-schema, tenancy-guards, tenant-prisma, audit, tenant-onboarding, tenant-isolation, route-registry
-  support/                     # test-only controllers, TestAuthenticator, tenancy fixtures (Clinic A, Clinic B, user M), db helpers
+  *.e2e-spec.ts                # health, errors, security, conventions, database, swagger, request id/logging; tenancy-schema, tenancy-guards, tenant-prisma, audit, tenant-onboarding, tenant-isolation; Phase 3: auth-schema, auth-sessions, auth-login, auth-endpoints, auth-me, auth-password, auth-security, invitations, cleanup, route-registry, route-registry
+  support/                     # test-only controllers, TestAuthenticator, tenancy fixtures (Clinic A, Clinic B, user M), db helpers, auth/mail helpers, TestClock, resettable throttler storage
 docs/                          # architecture, api-conventions, authorization, database, docker, environment, error-codes, multitenancy, security-privacy, adr/
-plans/                         # child plans (00 and 01 implemented; 02 drafted, awaiting approval; 03-05 not yet written)
+plans/                         # child plans (00, 01 and 02 implemented; 03-05 not yet written)
 Dockerfile  docker-compose.yml  .dockerignore  .github/workflows/ci.yml
 ```
 
@@ -606,7 +613,7 @@ Order adjustments vs. the requested outline (with reasons):
 - **Objectives:** A runnable, configured, conventional skeleton connected to PostgreSQL.
 - **Delivered:** Prisma pinned to 7.10.1 with `prisma.config.ts`, multi-file schema folder and generated client (Q1 resolved, ADR-0001); `PrismaService` with fail-fast connect and least-privilege role check; validated `@nestjs/config`; global prefix `/api` + URI versioning; global `ValidationPipe`; single exception filter + error code catalog; sanitized request ids + access log; Helmet + CORS from config; Swagger at `/api/docs`; liveness/readiness health endpoints; Observe PHI redaction; owner vs runtime DB roles and idempotent bootstrap; oxlint rules and architecture tests; separate `*_test` database for e2e; GitHub Actions CI (lint, format, typecheck, unit, migrate, e2e, build, audit, Docker build); default Hello World controller removed; project docs and ADRs 0001–0007.
 - **Pulled forward from Phase 7:** the multi-stage Dockerfile (`runtime`, `migrate`) and the local Docker Compose stack (§2.1), because the local database runs in Docker.
-- **Not delivered / still open:** hosting and region (Q4); rate limiting and authentication (Phase 3). The first Prisma migration arrived with Phase 2.
+- **Not delivered / still open:** hosting and region (Q4). (Rate limiting and authentication arrived in Phase 3; the first Prisma migration arrived with Phase 2.)
 - **Key decisions:** Prisma 7.10.1 pinned; Express kept; error envelope and explicit success envelopes; multi-file Prisma schema; oxlint kept (no ESLint); one image configured by environment variables.
 - **Done when (met):** `npm run start:dev` or `docker compose up --build -d` boots against Postgres; invalid env fails fast; `/api/health/ready` checks the DB; Swagger renders; CI defines the full pipeline; a deliberate error returns the standard shape without internals.
 
@@ -618,14 +625,17 @@ Order adjustments vs. the requested outline (with reasons):
 - **Dependencies:** Phase 1.
 - **Key decisions:** tenant-in-session model; global identity with tenant-scoped authorization (one account per human, roles on the membership); RLS deferred with role separation in place; composite FKs mandatory; `users.email` required (patient-portal access will need an email); the patient portal is modelled as `patient_portal_links` plus a separate principal type, not as memberships.
 - **Done when (met):** A query on a tenant-owned model without context throws; cross-tenant reads/writes on branches return 404 in tests; composite FKs reject cross-tenant references at the DB level (tested with raw inserts); onboarding creates tenant + branch + roles + owner atomically and is audited.
-- **Still open for Phase 3:** every protected route answers `401` until the JWT authenticator replaces `DenyAllAuthenticator`; users created by onboarding are `pending` until Phase 3 sets credentials. **Verification gaps:** `docker compose run --rm migrate`, the GitHub Actions run and `npm run db:test:reset` were not executed when Phase 2 was completed.
+- **Resolved in Phase 3:** the JWT authenticator replaced `DenyAllAuthenticator`, and onboarded owners get credentials through the emailed account-setup link. **Verification gaps recorded at the end of Phase 2:** `docker compose run --rm migrate`, the GitHub Actions run and `npm run db:test:reset` were not executed when Phase 2 was completed.
 
-### Phase 3 — Authentication (`plans/02-authentication.md`) — **child plan drafted, decisions D1–D11 pending approval; not implemented**
+### Phase 3 — Authentication — **COMPLETE** (`plans/02-authentication.md`)
 - **Objectives:** Secure global identity and sessions.
-- **Deliverables:** Argon2id hashing; login; access JWT; sessions with refresh rotation + reuse detection; logout / logout-all; switch-tenant; `GET /me`; email verification; forgot/reset password; change password; session listing/revocation; invitation acceptance (new + existing users); login throttling and lockout; mail sending via outbox; scheduled cleanup of expired tokens/sessions; auth events audited.
-- **Dependencies:** Phase 2; Q3, Q5, Q6.
-- **Key decisions:** token lifetimes; refresh token transport; registration policy.
-- **Done when:** All flows covered by e2e tests including token reuse, expired/revoked sessions, and enumeration-safe responses; password change/reset revokes sessions; switch-tenant refuses non-members.
+- **Delivered:** Argon2id hashing with a password policy (10-128 characters, bundled common-password list, not containing the email); access JWT (HS256, 15 min, no tenant/role/permission claims); server-side sessions (14-day idle, 30-day absolute) re-verified on every request by `JwtAuthenticator`; opaque refresh tokens in an httpOnly cookie, rotated on every use with reuse detection (no grace window); `POST /auth/login`, `refresh`, `logout`, `logout-all`, `switch-tenant`; `GET /me`, `/me/memberships`, `/me/sessions`, `DELETE /me/sessions/:id`, `POST /me/password`; forgot/reset password; account setup for onboarded owners; invitations (create, resend, accept for new, pending and existing users; permission `members.invite`); `ThrottlerGuard` as the first global guard (login, refresh, recovery, accept; per-user limit on password change) and account lockout; email through `@nestjs/mail` + `@nestjs/outbox` (queued in the same transaction, delivered after commit with retries); nightly cleanup job; audited auth events; log-hygiene and public-route allow-list tests.
+- **Deferred (decided in the plan):** `POST /auth/email/verify` (D6), `PATCH /me`, invitation listing/revocation and member administration (Phase 4), patient-portal principals, MFA/SSO, a shared throttle store.
+- **As-built deviations:** recorded in `plans/02-authentication.md` §19 (the active tenant lives on the session and the token has no `tid`; refresh-token cookie only; mail templates are inline TypeScript; a larger common-password source than planned; emailed tokens are held in the outbox until delivered; `Cache-Control: no-store` on auth responses; an ownership-notice email for existing owners).
+- **Dependencies:** Phase 2; Q3, Q5 (answered), Q6 (still open for production).
+- **Key decisions:** ADR-0011 (own authentication on `@nestjs/jwt` + `argon2`), ADR-0012 (refresh-token cookie), ADR-0013 (mail and outbox).
+- **Done when (met):** every flow is covered by e2e tests, including token reuse, expired and revoked sessions, enumeration-safe responses and lockout; password change/reset revoke sessions; switch-tenant refuses non-members; the Phase 2 tenant routes work end to end with real tokens; no password, token or cookie value appears in verbose logs; no email is sent for a rolled-back transaction.
+- **Not yet verified:** going live needs a production email provider (Q6). The GitHub Actions run with the new variables, the production-build start with `NODE_ENV=production` against a TLS database, and the Docker run of the full sign-in flow with real data were not executed (the Docker images build, migrate and boot, and `argon2` loads in the runtime image).
 
 ### Phase 4 — User Management & Authorization (`plans/03-user-management-and-authorization.md`)
 - **Objectives:** RBAC and member administration within tenants.
@@ -779,10 +789,10 @@ Kept in `docs/`, short and maintained alongside code (a PR changing behavior upd
 
 1. ~~**Prisma version.**~~ **Resolved (Phase 1, ADR-0001):** Prisma 7.10.1 pinned for CLI, client and `@prisma/adapter-pg`; revisit Prisma 8 once it is GA with matching packages.
 2. **RLS timing.** Recommended: defer to a Phase 7 spike (with DB role separation from Phase 1). Recorded as deferred in ADR-0010 and built that way in Phase 2; still needs explicit approval: approve, or require RLS on clinical tables from Phase 5?
-3. **Onboarding and registration.** Recommended: platform-admin-provisioned tenants and invitation-only staff accounts at launch; public self-registration disabled. Approve?
+3. ~~**Onboarding and registration.**~~ **Resolved (Phase 3, plans/02 D3):** platform-admin-provisioned tenants and invitation-only staff accounts; public self-registration is not implemented.
 4. **Hosting and data location.** *Partly answered:* the working assumption is a container host such as AWS EC2 with a managed PostgreSQL such as AWS RDS, but nothing is provisioned or committed. Still needed before Phase 7: confirm provider, region, backups/PITR, secret management, and cross-border data transfer considerations. The image and configuration already work with any externally supplied `DATABASE_URL`.
-5. **Refresh token transport.** Will the frontend be served from the same site (e.g., `app.doctayo.ph` + `api.doctayo.ph`) so httpOnly cookies work? If not, refresh tokens must be returned in the body and stored by the client.
-6. **Email and SMS providers.** Which transactional email provider? Is SMS required at launch (likely valuable for older patients' reminders)?
+5. ~~**Refresh token transport.**~~ **Resolved (Phase 3, ADR-0012):** the frontend and API share a site, so the refresh token is an httpOnly cookie. If that ever changes, the token would move to the request/response body (the rest of the design is unchanged).
+6. **Email and SMS providers.** *Partly answered:* email goes through `@nestjs/mail` and the outbox; `MAIL_TRANSPORT=smtp` (SMTP via `SMTP_URL`) is the only production transport wired today (the package's HTTP provider transports are not wired). **Still needed before go-live:** which transactional email provider and sender domain. Is SMS required at launch (likely valuable for older patients' reminders)?
 7. **Retention periods.** What retention periods apply to medical, financial, and audit records? (Needs clinic/legal input.)
 8. **Domain rules.** Need clinician/clinic-owner input on prescription requirements, ICD-10 usage, Senior Citizen/PWD discount handling, PhilHealth needs, and appointment rules (walk-ins, slot lengths).
 9. **Doctors without accounts.** Must the system record practitioners who never log in (e.g., visiting doctors)? Current design assumes every practitioner is a member user.
