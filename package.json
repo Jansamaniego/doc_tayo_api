@@ -28,6 +28,8 @@
     "db:migrate:status": "prisma migrate status",
     "db:test:reset": "node scripts/db/reset-test-db.mjs",
     "db:bootstrap": "node scripts/db/bootstrap.mjs",
+    "openapi:export": "npm run build && node --env-file=.env scripts/export-openapi.mjs",
+    "db:seed:dev": "npm run build && node --env-file=.env scripts/db/seed-dev.mjs",
     "docker:build": "docker build -t doc-tayo-api .",
     "docker:up": "docker compose up --build -d",
     "docker:migrate": "docker compose run --rm migrate",

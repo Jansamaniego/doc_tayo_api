@@ -37,6 +37,8 @@ open http://localhost:3000/api/docs   # Swagger UI (non-production)
 | `test:e2e` | End-to-end tests against the real `doc_tayo_test` database |
 | `docker:build` / `docker:up` / `docker:migrate` / `docker:down` | Build the image / start the API + Postgres in Docker / apply migrations in Docker / stop (see [Docker guide](docs/docker.md)) |
 | `db:bootstrap` | One-time idempotent setup of roles, databases and grants (needs `DB_ADMIN_URL`) |
+| `db:seed:dev` | Builds, then creates the development clinic (owner and receptionist, known password). Refuses to run in production; safe to repeat |
+| `openapi:export` | Builds, then writes the API contract to `docs/openapi.json` (no database needed). A test fails when the committed file is stale |
 | `db:generate` | `prisma generate` |
 | `db:migrate:dev` / `db:migrate:deploy` / `db:migrate:status` | Migrations (owner role) |
 | `db:test:reset` | Reset the test DB (refuses non-`_test` names; Prisma asks for confirmation) |
@@ -46,6 +48,7 @@ open http://localhost:3000/api/docs   # Swagger UI (non-production)
 - [Docker guide](docs/docker.md) (what it is, explained at two levels, and how to run it)
 - [Environment variables](docs/environment.md)
 - [Authentication, sessions, email](docs/authentication.md)
+- **Frontend developers:** [Frontend integration guide](docs/frontend-integration.md) and the API contract [`docs/openapi.json`](docs/openapi.json)
 - [Database, roles and migrations](docs/database.md)
 - [API conventions](docs/api-conventions.md) · [Error codes](docs/error-codes.md)
 - [Architecture](docs/architecture.md) · [Authorization](docs/authorization.md) · [Multi-tenancy](docs/multitenancy.md) · [Security & privacy notes](docs/security-privacy.md)

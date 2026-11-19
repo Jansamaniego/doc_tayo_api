@@ -19,6 +19,8 @@ interface Options {
   controllers?: Type<unknown>[];
   /** Keep the production authenticator (JwtAuthenticator) instead of TestAuthenticator. */
   productionAuthenticator?: boolean;
+  /** Leave out the test-only controllers (a clean app, as in production). */
+  omitTestControllers?: boolean;
   /** Replaces the system clock (expiry tests move time instead of sleeping). */
   clock?: Clock;
 }
@@ -36,11 +38,13 @@ export async function createTestApp(
   try {
     const builder = Test.createTestingModule({
       imports: [AppModule],
-      controllers: [
-        TestController,
-        TenantTestController,
-        ...(options.controllers ?? []),
-      ],
+      controllers: options.omitTestControllers
+        ? []
+        : [
+            TestController,
+            TenantTestController,
+            ...(options.controllers ?? []),
+          ],
     });
     if (!options.productionAuthenticator) {
       builder.overrideProvider(AUTHENTICATOR).useClass(TestAuthenticator);

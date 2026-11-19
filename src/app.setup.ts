@@ -31,6 +31,24 @@ export const DOCS_PATH = `${API_PREFIX}/docs`;
 const JSON_BODY_LIMIT = '1mb';
 
 /**
+ * The OpenAPI document of the running app (paths include the global prefix and
+ * URI version). Used by Swagger UI and by `npm run openapi:export`, which
+ * writes `docs/openapi.json`, the contract handed to the frontend.
+ */
+export function buildOpenApiDocument(app: NestExpressApplication) {
+  return SwaggerModule.createDocument(
+    app,
+    new DocumentBuilder()
+      .setTitle('DocTayo API')
+      .setDescription(
+        'Clinic management backend. Errors use { error: { status, code, message, details?, requestId } }.',
+      )
+      .setVersion('1')
+      .build(),
+  );
+}
+
+/**
  * Applies every global concern. Used by main.ts AND by the e2e tests, so tests
  * exercise the real prefix, versioning, pipes, filter, headers and CORS.
  */
@@ -100,7 +118,9 @@ export function applyAppSetup(app: NestExpressApplication): void {
       'X-Request-Id',
       'Idempotency-Key',
     ],
-    exposedHeaders: ['X-Request-Id'],
+    // Browsers hide other response headers from cross-origin code, and the
+    // frontend needs Retry-After to tell a throttled user how long to wait.
+    exposedHeaders: ['X-Request-Id', 'Retry-After'],
     credentials: cors.allowCredentials,
     maxAge: 600,
   });
@@ -124,17 +144,7 @@ export function applyAppSetup(app: NestExpressApplication): void {
   app.useGlobalFilters(new AllExceptionsFilter());
 
   if (swagger.enabled) {
-    const document = SwaggerModule.createDocument(
-      app,
-      new DocumentBuilder()
-        .setTitle('DocTayo API')
-        .setDescription(
-          'Clinic management backend. Errors use { error: { status, code, message, details?, requestId } }.',
-        )
-        .setVersion('1')
-        .build(),
-    );
-    SwaggerModule.setup(DOCS_PATH, app, document);
+    SwaggerModule.setup(DOCS_PATH, app, buildOpenApiDocument(app));
   }
 
   app.enableShutdownHooks();

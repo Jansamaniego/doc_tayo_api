@@ -31,6 +31,12 @@ import {
 } from './dto/login.dto.js';
 import { AccountSetupService } from './account-setup.service.js';
 import { PasswordRecoveryService } from './password-recovery.service.js';
+import {
+  AcceptedEnvelope,
+  LoginEnvelope,
+  RefreshEnvelope,
+  SwitchTenantEnvelope,
+} from './dto/auth-response.dto.js';
 import { LoginService } from './login.service.js';
 import { RefreshService } from './refresh.service.js';
 import { SessionService } from './session.service.js';
@@ -59,6 +65,7 @@ export class AuthController {
   @IpLimited()
   @Throttle({ default: { ...FIVE_PER_FIFTEEN, getTracker: ipAndEmailTracker } })
   @ApiOkResponse({
+    type: LoginEnvelope,
     description:
       'Access token, user and memberships. The refresh token is set in an HttpOnly cookie, never in the body.',
   })
@@ -88,7 +95,10 @@ export class AuthController {
   @Post('refresh')
   @HttpCode(200)
   @Throttle({ default: { limit: 30, ttl: 60_000 } })
-  @ApiOkResponse({ description: 'A new access token; the cookie is rotated.' })
+  @ApiOkResponse({
+    type: RefreshEnvelope,
+    description: 'A new access token; the cookie is rotated.',
+  })
   @ApiUnauthorizedResponse({ description: 'UNAUTHENTICATED' })
   async refreshSession(
     @Req() req: Request,
@@ -162,6 +172,7 @@ export class AuthController {
   @Post('switch-tenant')
   @HttpCode(200)
   @ApiOkResponse({
+    type: SwitchTenantEnvelope,
     description:
       'The new active clinic and the permissions held there. Applies from the next request.',
   })
@@ -178,6 +189,7 @@ export class AuthController {
   @HttpCode(202)
   @Throttle({ default: FIVE_PER_FIFTEEN })
   @ApiAcceptedResponse({
+    type: AcceptedEnvelope,
     description:
       'Always 202, whether or not the email has an account (no enumeration).',
   })

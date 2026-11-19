@@ -18,7 +18,13 @@ import {
 import { TenantNotRequired } from '../../common/decorators/tenant-not-required.decorator.js';
 import { UserThrottleGuard } from '../../common/guards/user-throttle.guard.js';
 import { PasswordChangeService } from '../auth/password-change.service.js';
-import { ChangePasswordDto, SessionIdParams } from './dto/me.dto.js';
+import { MembershipListEnvelope } from '../tenancy/dto/membership.dto.js';
+import {
+  ChangePasswordDto,
+  MeProfileEnvelope,
+  SessionIdParams,
+  SessionListEnvelope,
+} from './dto/me.dto.js';
 import { MeService } from './me.service.js';
 
 @ApiTags('me')
@@ -33,6 +39,7 @@ export class MeController {
 
   @Get()
   @ApiOkResponse({
+    type: MeProfileEnvelope,
     description:
       'The profile, the active clinic and the permissions held there.',
   })
@@ -52,13 +59,18 @@ export class MeController {
   }
 
   @Get('memberships')
-  @ApiOkResponse({ description: 'Every clinic the user belongs to.' })
+  @ApiOkResponse({
+    type: MembershipListEnvelope,
+    description:
+      'Every clinic the user belongs to (removed memberships excluded).',
+  })
   async memberships() {
     return { data: await this.me.listMemberships() };
   }
 
   @Get('sessions')
   @ApiOkResponse({
+    type: SessionListEnvelope,
     description: 'Active sessions; the current one is flagged.',
   })
   async sessions() {

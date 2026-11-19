@@ -344,7 +344,7 @@ No global "soft delete" magic: each model's archival behavior is explicit in its
 - Raw SQL in migrations for what Prisma cannot model (exclusion constraints, `pg_trgm`, check constraints, future RLS policies).
 - **Role separation is already in place.** Migrations run as `doctayo_owner` (`DATABASE_MIGRATION_URL`, read by `prisma.config.ts`, CI and test setup, never by the app); the API runs as `doctayo_app` (`DATABASE_URL`: DML only, no DDL, not superuser, `NOBYPASSRLS`). Default privileges give the runtime role access to tables the owner creates later, so migrations need no per-table grants. Roles and grants come from `scripts/db/bootstrap.sql` (idempotent; run once by an admin, automatically by the Compose `postgres` container on first start of an empty volume).
 - Migrations are never run automatically when the API starts.
-- Seeds: there is no seed step. Permission rows are inserted by the migration that introduces a key (checked against the code catalog by a test); role templates live in code and are applied during tenant onboarding. Dev-only demo data, if ever needed, goes in a separate script that refuses to run in production.
+- Seeds: there is no production seed step. Permission rows are inserted by the migration that introduces a key (checked against the code catalog by a test); role templates live in code and are applied during tenant onboarding. **Development demo data** exists: `npm run db:seed:dev` (`src/dev/seed.ts`, run by `scripts/db/seed-dev.mjs`) creates "Sunrise Clinic" with an owner, a receptionist and a second branch with a known password, is idempotent, and refuses to run in production.
 
 ---
 
@@ -478,7 +478,7 @@ PATCH  /api/v1/admin/users/:userId/status
 ### 7.8 Swagger
 
 - Swagger UI is served at `/api/docs` (JSON at `/api/docs-json`) when `SWAGGER_ENABLED` is true. Every controller has `@ApiTags`; every DTO property documented (`@ApiProperty`) with examples; error responses documented using the shared error schema.
-- The generated OpenAPI JSON (`/api/docs-json`) is **the contract** the frontend consumes; it is exported to the repo on CI so contract changes are visible in review.
+- The generated OpenAPI JSON is **the contract** the frontend consumes. It is exported to `docs/openapi.json` with `npm run openapi:export` (no database needed) and committed, so contract changes are visible in review; `test/openapi-contract.e2e-spec.ts` fails when the committed file is stale, when any endpoint that answers with a body lacks a documented response schema, or when a documented auth/`/me` shape differs from the real response.
 
 ### 7.9 Backend support for older, non-technical end users
 
@@ -566,7 +566,8 @@ src/
 prisma/
   schema/                      # multi-file schema: base, identity, tenancy, audit; one file per later domain
   migrations/                  # 20261118000000_tenancy_foundation (Phase 2), 20261119000000_authentication (Phase 3) and later
-  seed/                        # later
+  dev/                         # development seed (seed.ts); refuses to run in production
+  seed/                        # later (production reference data, if ever needed)
 scripts/
   db/                          # bootstrap.sql (roles, databases, grants), bootstrap.mjs, grants.sql, reset-test-db.mjs
   docker/                      # postgres-init.sh (runs bootstrap.sql on the first start of the Compose database)
@@ -630,6 +631,7 @@ Order adjustments vs. the requested outline (with reasons):
 ### Phase 3 — Authentication — **COMPLETE** (`plans/02-authentication.md`)
 - **Objectives:** Secure global identity and sessions.
 - **Delivered:** Argon2id hashing with a password policy (10-128 characters, bundled common-password list, not containing the email); access JWT (HS256, 15 min, no tenant/role/permission claims); server-side sessions (14-day idle, 30-day absolute) re-verified on every request by `JwtAuthenticator`; opaque refresh tokens in an httpOnly cookie, rotated on every use with reuse detection (no grace window); `POST /auth/login`, `refresh`, `logout`, `logout-all`, `switch-tenant`; `GET /me`, `/me/memberships`, `/me/sessions`, `DELETE /me/sessions/:id`, `POST /me/password`; forgot/reset password; account setup for onboarded owners; invitations (create, resend, accept for new, pending and existing users; permission `members.invite`); `ThrottlerGuard` as the first global guard (login, refresh, recovery, accept; per-user limit on password change) and account lockout; email through `@nestjs/mail` + `@nestjs/outbox` (queued in the same transaction, delivered after commit with retries); nightly cleanup job; audited auth events; log-hygiene and public-route allow-list tests.
+- **Frontend readiness (follow-up, 2026-11-19):** response schemas for every auth and `/me` endpoint (`dto/auth-response.dto.ts`, `dto/me.dto.ts`, `tenancy/dto/membership.dto.ts`); the committed `docs/openapi.json` with `npm run openapi:export` and a drift test; `npm run db:seed:dev`; `Retry-After` exposed through CORS so browser code can read it; browser-style CORS-with-credentials tests; `docs/frontend-integration.md`.
 - **Deferred (decided in the plan):** `POST /auth/email/verify` (D6), `PATCH /me`, invitation listing/revocation and member administration (Phase 4), patient-portal principals, MFA/SSO, a shared throttle store.
 - **As-built deviations:** recorded in `plans/02-authentication.md` §19 (the active tenant lives on the session and the token has no `tid`; refresh-token cookie only; mail templates are inline TypeScript; a larger common-password source than planned; emailed tokens are held in the outbox until delivered; `Cache-Control: no-store` on auth responses; an ownership-notice email for existing owners).
 - **Dependencies:** Phase 2; Q3, Q5 (answered), Q6 (still open for production).
@@ -739,8 +741,9 @@ Kept in `docs/`, short and maintained alongside code (a PR changing behavior upd
 | `docs/database.md` | Roles, Prisma layout, migrations and test database (**exists**); later also conventions (§6), ERD (Mermaid, generated from Prisma schema), global vs tenant-owned tables, retention per table. |
 | `docs/api-conventions.md` | §7 in reference form. **Exists** (Phase 1 content). |
 | `docs/error-codes.md` | Stable error code catalog. **Exists.** |
-| OpenAPI | Generated by `@nestjs/swagger`; exported `openapi.json` committed by CI. The API contract for the frontend. |
-| `docs/environment.md` | Required env vars, local setup, seeding, running tests. **Exists.** |
+| `docs/openapi.json` | Generated by `@nestjs/swagger` (`npm run openapi:export`) and committed; a test keeps it current. The API contract for the frontend. **Exists.** |
+| `docs/frontend-integration.md` | What the frontend can build today, how to run and seed the API, the sign-in/refresh rules, error handling, pages the emails link to. **Exists.** |
+| `docs/environment.md` | Required env vars, local setup, running tests. **Exists** (seeding: `README.md` and `docs/frontend-integration.md`). |
 | `docs/docker.md` | Docker and Compose guide: local architecture, networking, volumes, health checks, migrations, reset, production use of the same image. **Exists.** |
 | `docs/deployment.md` | Build, migrate, release, rollback, backups/restore, secrets, monitoring/alerts. |
 | `docs/security-privacy.md` | Data classification, logging rules, audit coverage, retention, incident response (not legal advice). **Exists** (logging/redaction rules only so far). |
